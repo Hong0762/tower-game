@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>守塔军师 · 策略塔防</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%231c2b1c'/%3E%3Cpath d='M16 6l8 3v7c0 6-4 9-8 10-4-1-8-4-8-10V9z' fill='%234caf7d'/%3E%3Ccircle cx='16' cy='14' r='3' fill='%23f3ce6a'/%3E%3C/svg%3E">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; }
+  body {
+    background:#141c14; color:#e8f0e8;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    overflow:hidden;
+  }
+  #wrap { width:100%; max-width:480px; display:flex; flex-direction:column; height:100vh; height:100dvh; }
+
+  /* 状态栏 */
+  #hud {
+    display:grid; grid-template-columns:repeat(4,1fr); gap:5px;
+    padding:6px 8px 5px; flex:0 0 auto;
+    background:linear-gradient(#1d2a1d,#182318);
+    border-bottom:1px solid #2c3a2c;
+  }
+  .stat {
+    background:#243224; border:1px solid #334533; border-radius:10px;
+    padding:4px 3px; text-align:center;
+  }
+  .stat .v { font-size:16px; font-weight:700; }
+  .stat .k { font-size:11px; color:#93a893; margin-top:1px; }
+  .stat.gold .v { color:#f3ce6a; }
+  .stat.life .v { color:#e88; }
+  .stat.wave .v { color:#8fd48f; }
+  .stat.score .v { color:#9cd0f5; }
+
+  /* 画布 */
+  #canvasBox { position:relative; flex:1 1 auto; min-height:0; width:100%;
+    display:flex; align-items:center; justify-content:center; padding:4px 6px; }
+  #cv { display:block; touch-action:none; background:#182418; max-width:100%; max-height:100%; }
+  .ctlBtn {
+    position:absolute; top:8px; z-index:4;
+    width:38px; height:38px; border-radius:10px; border:1px solid #456;
+    background:rgba(20,30,24,.82); color:#cfe3cf; font-size:16px;
+  }
+  #pauseBtn { right:8px; }
+  #musicBtn { right:54px; }
+  #musicBtn.off { color:#7a907a; text-decoration:line-through; }
+
+  /* 底部操作区 */
+  #bottom {
+    flex:0 0 auto;
+    padding:6px 10px calc(8px + env(safe-area-inset-bottom));
+    background:#182318; border-top:1px solid #2c3a2c;
+  }
+  #waveBar { display:flex; gap:8px; align-items:center; }
+  #waveInfo { flex:1; font-size:13px; color:#a8c0a8; }
+  #callBtn {
+    flex:0 0 auto; border:none; border-radius:12px; padding:10px 16px;
+    font-size:15px; font-weight:700; color:#0f1a0f;
+    background:linear-gradient(#9fe09f,#6fbf6f); width:132px;
+  }
+  #callBtn:active { filter:brightness(.9); }
+
+  /* 通用面板 */
+  .sheet {
+    position:fixed; left:0; right:0; bottom:0; z-index:30;
+    max-width:480px; margin:0 auto;
+    background:#1c281c; border-top:2px solid #3a4d3a;
+    padding:12px 14px calc(14px + env(safe-area-inset-bottom));
+    display:none;
+  }
+  .sheet.on { display:block; }
+  .sheet h3 { font-size:14px; color:#b8d0b8; margin-bottom:10px; font-weight:600; }
+  .btnRow { display:flex; gap:8px; }
+  .tcard {
+    flex:1; border:1px solid #3a4d3a; border-radius:12px; background:#243224;
+    padding:10px 6px; text-align:center;
+  }
+  .tcard.off { opacity:.38; }
+  .tcard .tn { font-size:15px; font-weight:700; }
+  .tcard .td { font-size:11px; color:#93a893; margin:3px 0 5px; min-height:14px; }
+  .tcard .tc { font-size:15px; font-weight:700; color:#f3ce6a; }
+  .tcard:active { filter:brightness(1.25); }
+  .wide { width:100%; border:none; border-radius:12px; padding:13px; font-size:15px; font-weight:700; }
+  .btnUp { background:linear-gradient(#ffd97a,#e0a83c); color:#221600; }
+  .btnSell { background:#3a2a2a; color:#e8b0a0; margin-top:8px; }
+  .tinfo { font-size:12px; color:#a8c0a8; margin-bottom:10px; line-height:1.7; }
+
+  /* 覆盖层 */
+  #overlay {
+    position:fixed; inset:0; z-index:50; background:rgba(8,12,9,.86);
+    display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  #overlay.on { display:flex; }
+  .panel {
+    width:100%; max-width:400px; max-height:88vh; overflow-y:auto;
+    background:#1c281c; border:1px solid #3a4d3a; border-radius:16px; padding:22px 18px;
+  }
+  .panel h2 { font-size:20px; text-align:center; margin-bottom:6px; }
+  .panel .sub { text-align:center; font-size:13px; color:#93a893; margin-bottom:16px; }
+  .scoreLine { display:flex; justify-content:space-between; font-size:14px; padding:7px 2px; border-bottom:1px dashed #334533; }
+  .scoreLine b { color:#9cd0f5; }
+  .scoreLine.total b { color:#f3ce6a; font-size:17px; }
+  input[type=text], select {
+    width:100%; margin-top:12px; padding:12px; border-radius:10px; border:1px solid #456;
+    background:#243224; color:#e8f0e8; font-size:16px; text-align:center;
+  }
+  select { -webkit-appearance:none; appearance:none; }
+  .tabBtn {
+    flex:1; padding:9px 0; border-radius:10px; border:1px solid #3a4d3a;
+    background:#243224; color:#93a893; font-size:14px; font-weight:600;
+  }
+  .tabBtn.on { background:#334533; color:#e8f0e8; border-color:#5a7a5a; }
+  #toast {
+    position:fixed; top:66px; left:50%; transform:translateX(-50%);
+    z-index:60; max-width:88vw; padding:10px 16px; border-radius:12px;
+    background:rgba(20,32,22,.94); border:1px solid #6a8a5a; color:#ffe9a0;
+    font-size:14px; font-weight:600; text-align:center;
+    opacity:0; pointer-events:none; transition:opacity .3s;
+  }
+  #toast.on { opacity:1; }
+  .rankRow .pc {
+    flex:0 0 auto; font-size:11px; color:#8fd48f; border:1px solid #37503a;
+    border-radius:6px; padding:1px 6px;
+  }
+  .provRow { display:flex; align-items:center; gap:10px; padding:9px 6px; border-bottom:1px dashed #2c3a2c; font-size:14px; }
+  .provRow .rk { width:30px; color:#f3ce6a; font-weight:700; text-align:center; }
+  .provRow .nm { flex:1; }
+  .provRow .sc { color:#9cd0f5; font-weight:700; }
+  .provRow .wv { width:72px; text-align:right; color:#93a893; font-size:12px; }
+  .big {
+    width:100%; margin-top:12px; border:none; border-radius:12px; padding:14px;
+    font-size:16px; font-weight:700; color:#0f1a0f;
+    background:linear-gradient(#9fe09f,#6fbf6f);
+  }
+  .ghost { background:#243224; color:#cfe3cf; border:1px solid #3a4d3a; }
+
+  /* 排行榜 */
+  #boardBox { display:none; }
+  #boardBox.on { display:block; }
+  .rankRow { display:flex; align-items:center; gap:10px; padding:9px 6px; border-bottom:1px dashed #2c3a2c; font-size:14px; }
+  .rankRow .rk { width:30px; color:#f3ce6a; font-weight:700; text-align:center; }
+  .rankRow .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rankRow .sc { color:#9cd0f5; font-weight:700; }
+  .rankRow .wv { width:64px; text-align:right; color:#93a893; font-size:12px; }
+  .rankEmpty { text-align:center; color:#7a907a; padding:30px 0; font-size:14px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <div class="stat gold"><div class="v" id="hGold">150</div><div class="k">金币</div></div>
+    <div class="stat life"><div class="v" id="hLife">20</div><div class="k">生命</div></div>
+    <div class="stat wave"><div class="v" id="hWave">0</div><div class="k">波次</div></div>
+    <div class="stat score"><div class="v" id="hScore">0</div><div class="k">得分</div></div>
+  </div>
+
+  <div id="canvasBox">
+    <canvas id="cv" width="432" height="432"></canvas>
+    <button id="musicBtn" class="ctlBtn" title="音乐开关">♪</button>
+    <button id="pauseBtn" class="ctlBtn">Ⅱ</button>
+  </div>
+
+  <div id="bottom">
+    <div id="waveBar">
+      <div id="waveInfo">准备迎战…</div>
+      <button id="callBtn">立即出怪</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- 建塔面板 -->
+<div class="sheet" id="buildSheet">
+  <h3>在此建造炮塔</h3>
+  <div class="btnRow" id="buildCards"></div>
+</div>
+
+<!-- 塔操作面板 -->
+<div class="sheet" id="towerSheet">
+  <h3 id="towerTitle">箭塔 Lv1</h3>
+  <div class="tinfo" id="towerInfo"></div>
+  <div class="btnRow">
+    <button class="wide btnUp" id="upBtn">升级</button>
+  </div>
+  <button class="wide btnSell" id="sellBtn">拆除返还</button>
+</div>
+
+<!-- 开始 / 结算 / 排行榜 -->
+<div id="overlay">
+  <div class="panel" id="startBox">
+    <h2>守塔军师</h2>
+    <div class="sub">敌军更强更快 · 每10波记录全国省份排名</div>
+    <button class="big" id="resumeBtn" style="display:none;margin-top:0">继续上次进度</button>
+    <div class="sub" id="saveInfo" style="display:none;margin:6px 0 12px"></div>
+    <div class="tinfo" style="text-align:left">
+      · 点击空地<b style="color:#f3ce6a">建塔</b>，点击已建塔<b style="color:#f3ce6a">升级/拆除</b><br>
+      · 箭塔速射单体 · 炮塔溅射群伤 · 冰塔减速控场<br>
+      · 升级外观逐级更华丽，Lv3 满级金装<br>
+      · 敌人走到底部军营会扣生命，生命归零结束<br>
+      · 敌军增强：波次更密、血量成长更快、20波起首领成双<br>
+      · <b style="color:#f3ce6a">每10波自动记录排名</b>（全国榜+省份榜）<br>
+      · <b style="color:#f3ce6a">进度自动保存</b>：有事随时退出，回来点「继续上次进度」
+    </div>
+    <button class="big" id="startBtn">开始守塔</button>
+    <button class="big ghost" id="boardBtn1" style="margin-top:10px">查看排行榜</button>
+  </div>
+
+  <div class="panel" id="endBox" style="display:none">
+    <h2>防线告破</h2>
+    <div class="sub" id="endSub">坚守到了第 N 波</div>
+    <div class="scoreLine"><span>波次得分</span><b id="eWave">0</b></div>
+    <div class="scoreLine"><span>击杀得分</span><b id="eKill">0</b></div>
+    <div class="scoreLine"><span>剩余生命</span><b id="eLife">0</b></div>
+    <div class="scoreLine"><span>剩余金币</span><b id="eGold">0</b></div>
+    <div class="scoreLine total"><span>总得分</span><b id="eTotal">0</b></div>
+    <input type="text" id="nameInput" maxlength="12" placeholder="输入昵称上榜">
+    <select id="eProvSel"></select>
+    <button class="big" id="submitBtn">提交成绩</button>
+    <button class="big ghost" id="againBtn" style="margin-top:10px">再来一局</button>
+  </div>
+
+  <div class="panel" id="mileBox" style="display:none">
+    <h2 id="mileTitle">第10波达成 · 记录排名</h2>
+    <div class="sub">留名并选择省份，以后每10波自动记录</div>
+    <div class="tinfo" id="mileStats" style="text-align:center"></div>
+    <input type="text" id="mNameInput" maxlength="12" placeholder="输入昵称">
+    <select id="mProvSel"></select>
+    <button class="big" id="mSaveBtn">记录我的排名</button>
+    <button class="big ghost" id="mSkipBtn" style="margin-top:10px">跳过，继续战斗</button>
+  </div>
+
+  <div class="panel" id="boardBox">
+    <h2>英雄榜</h2>
+    <div class="sub">同昵称只保留最高分</div>
+    <div class="btnRow" style="margin-bottom:10px">
+      <button class="tabBtn on" id="tabInd">个人榜</button>
+      <button class="tabBtn" id="tabProv">省份榜</button>
+    </div>
+    <div id="rankList"></div>
+    <div id="provList" style="display:none"></div>
+    <button class="big ghost" id="boardBtn2" style="margin-top:16px">返回</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ================= 基础常量 ================= */
+const COLS=9, ROWS=9, CELL=48, W=COLS*CELL, H=ROWS*CELL;
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+
+/* 谷道路径（紧凑蛇形，集中在画面中部） */
+const WAYPOINTS=[[4,0],[4,1],[7,1],[7,4],[1,4],[1,7],[4,7],[4,8]];
+const WPX=WAYPOINTS.map(p=>({x:p[0]*CELL+CELL/2, y:p[1]*CELL+CELL/2}));
+WPX.unshift({x:WPX[0].x, y:-24});  // 敌人从画布上方入场
+
+/* 路格集合（不可建塔） */
+const pathCells=new Set();
+for(let i=0;i<WAYPOINTS.length-1;i++){
+  let[c1,r1]=WAYPOINTS[i], [c2,r2]=WAYPOINTS[i+1];
+  let dc=Math.sign(c2-c1), dr=Math.sign(r2-r1);
+  let c=c1, r=r1;
+  pathCells.add(c+','+r);
+  while(c!==c2||r!==r2){ c+=dc; r+=dr; pathCells.add(c+','+r); }
+}
+
+/* 塔定义：3级可升 */
+const TOWERS={
+  arrow:{ name:'箭塔', desc:'速射·单体', color:'#4caf7d', cost:60,  up:[50,90],
+    lv:[{dmg:14,rate:1.4,range:96},{dmg:24,rate:1.6,range:104},{dmg:40,rate:1.9,range:112}] },
+  cannon:{ name:'炮塔', desc:'溅射·群伤', color:'#d0842f', cost:120, up:[100,180],
+    lv:[{dmg:34,rate:0.55,range:128,blast:54},{dmg:58,rate:0.6,range:136,blast:58},{dmg:95,rate:0.66,range:144,blast:64}] },
+  frost:{ name:'冰塔', desc:'减速·控场', color:'#4a9fe0', cost:80,  up:[60,110],
+    lv:[{dmg:8,rate:1.1,range:88,slow:.55,st:1.6},{dmg:13,rate:1.2,range:96,slow:.42,st:2.0},{dmg:20,rate:1.3,range:104,slow:.30,st:2.4}] },
+};
+
+/* 敌人定义 */
+const ENEMIES={
+  grunt:{ name:'步兵', hp:44,  spd:52, bounty:10,  dmg:1, r:11, color:'#d0603a' },
+  runner:{name:'疾行', hp:30,  spd:95, bounty:12,  dmg:1, r:9,  color:'#c9a13a' },
+  tank:{  name:'装甲', hp:230, spd:30, bounty:32,  dmg:2, r:14, color:'#6b6fa0' },
+  boss:{  name:'首领', hp:1500,spd:24, bounty:220, dmg:6, r:18, color:'#a03a5c' },
+};
+
+/* ================= 游戏状态 ================= */
+let G=null, paused=false, lastT=0, running=false;
+
+function newGame(){
+  return {
+    gold:150, lives:20, wave:0, kills:0, score:0,
+    enemies:[], towers:[], bullets:[], fx:[], floats:[],
+    phase:'idle', countdown:5, queue:[], spawnGap:0, spawnIdx:0,
+    sel:null, over:false, submitted:false,
+  };
+}
+
+/* 波次编成 */
+function buildWave(w){
+  const list=[];
+  const n=8+Math.floor(w*2.6);
+  for(let i=0;i<n;i++){
+    let t='grunt';
+    if(w>=2 && i%3===1) t='runner';
+    if(w>=4 && i%5===4) t='tank';
+    if(w>=6 && i%4===3) t='runner';
+    if(w>=12 && i%7===6) t='tank';
+    list.push(t);
+  }
+  if(w%10===0){ list.unshift('boss'); if(w>=20) list.unshift('boss'); }
+  return list;
+}
+
+function calcScore(g){
+  return g.kills*50 + g.wave*500 + Math.max(0,g.lives)*100 + Math.max(0,Math.floor(g.gold));
+}
+
+/* ================= 敌人 ================= */
+function spawnEnemy(type,w){
+  const d=ENEMIES[type];
+  const hpMul=Math.pow(1.22,w-1), spdMul=1+Math.min(.9,w*0.015);
+  G.enemies.push({
+    type, seg:0, segT:0, pos:{x:WPX[0].x, y:WPX[0].y}, hp:Math.round(d.hp*hpMul),
+    hpMax:Math.round(d.hp*hpMul), spd:d.spd*spdMul, slowUntil:0, slowF:1,
+    bounty:d.bounty, dmg:d.dmg, r:d.r, color:d.color, dead:false,
+    prog:-1,
+  });
+}
+
+function enemyProgress(e){
+  return e.seg*10000+e.segT;
+}
+
+function moveEnemy(e,dt){
+  const now=performance.now()/1000;
+  const f=(now<e.slowUntil)?e.slowF:1;
+  let dist=e.spd*f*dt;
+  while(dist>0&&e.seg<WPX.length-1){
+    const a=WPX[e.seg], b=WPX[e.seg+1];
+    const segLen=Math.hypot(b.x-a.x,b.y-a.y);
+    const remain=segLen-e.segT;
+    if(dist>=remain){
+      dist-=remain; e.seg++; e.segT=0;
+    }else{
+      e.segT+=dist; dist=0;
+    }
+  }
+  if(e.seg<WPX.length-1){
+    const a=WPX[e.seg], b=WPX[e.seg+1];
+    const segLen=Math.hypot(b.x-a.x,b.y-a.y);
+    const t=e.segT/segLen;
+    e.pos.x=a.x+(b.x-a.x)*t; e.pos.y=a.y+(b.y-a.y)*t;
+  }
+  e.prog=e.seg*10000+e.segT;
+  // 到达终点军营：漏怪扣生命
+  if(e.seg>=WPX.length-1){
+    e.pos.x=WPX[WPX.length-1].x; e.pos.y=WPX[WPX.length-1].y;
+    e.dead=true; e.leaked=true;
+    G.lives-=e.dmg;
+    addFloat(WPX[WPX.length-1].x,WPX[WPX.length-1].y-14,'-'+e.dmg,'#ff7d7d');
+    if(G.lives<=0){ G.lives=0; endGame(); }
+  }
+}
+
+/* ================= 塔与子弹 ================= */
+function towerStat(t){
+  return TOWERS[t.type].lv[t.lvl];
+}
+function towerSpent(t){
+  const d=TOWERS[t.type]; let s=d.cost;
+  for(let i=0;i<t.lvl;i++) s+=d.up[i];
+  return s;
+}
+
+function towerFire(t,dt,now){
+  const st=towerStat(t);
+  if(now-t.lastFire<1/st.rate) return;
+  const r2=st.range*st.range;
+  // 选射程内最靠前的敌人
+  let best=null,bp=-1;
+  for(const e of G.enemies){
+    if(e.dead) continue;
+    const dx=e.pos.x-t.x, dy=e.pos.y-t.y;
+    if(dx*dx+dy*dy<=r2 && e.prog>bp){ bp=e.prog; best=e; }
+  }
+  if(!best) return;
+  t.lastFire=now;
+  const ang=Math.atan2(best.pos.y-t.y,best.pos.x-t.x);
+  t.ang=ang;   // 图标朝向目标
+  if(t.type==='cannon'){
+    t.recoil=1; t.muzzleT=now;   // 后坐与炮口闪光
+    G.bullets.push({kind:'shell',x:t.x,y:t.y,tx:best.pos.x,ty:best.pos.y,ang,
+      spd:200,dmg:st.dmg,blast:st.blast,color:'#e0b050',hitX:best.pos.x,hitY:best.pos.y,
+      born:now,targetAlive:true});
+    // 炮弹飞向预测点即可：目标位置近似
+    G.bullets[G.bullets.length-1].tx=best.pos.x; G.bullets[G.bullets.length-1].ty=best.pos.y;
+  }else{
+    G.bullets.push({kind:t.type==='frost'?'frost':'arrow',x:t.x,y:t.y,
+      target:best,spd:t.type==='frost'?260:340,dmg:st.dmg,
+      slow:st.slow,st:st.st,color:t.type==='frost'?'#9fd0ff':'#e8e8c0',ang});
+  }
+}
+
+function hurt(e,dmg,now){
+  if(e.dead) return;
+  e.hp-=dmg;
+  if(e.hp<=0){
+    e.dead=true; e.killed=true;
+    G.gold+=e.bounty; G.kills++;
+    G.score=calcScore(G);
+    addFloat(e.pos.x,e.pos.y,'+'+e.bounty,'#f3ce6a');
+    boom(e.pos.x,e.pos.y,e.r+4,e.color);
+    updateHUD();
+  }
+}
+
+function moveBullets(dt,now){
+  for(const b of G.bullets){
+    if(b.hit) continue;
+    if(b.kind==='shell'){
+      const dx=b.tx-b.x, dy=b.ty-b.y, d=Math.hypot(dx,dy);
+      const step=b.spd*dt;
+      if(d<=step){
+        b.hit=true; b.x=b.tx; b.y=b.ty;
+        // 溅射
+        boom(b.x,b.y,b.blast,'#e8a040');
+        for(const e of G.enemies){
+          if(e.dead) continue;
+          if(Math.hypot(e.pos.x-b.x,e.pos.y-b.y)<=b.blast+e.r) hurt(e,b.dmg,now);
+        }
+      }else{
+        b.x+=dx/d*step; b.y+=dy/d*step;
+      }
+    }else{
+      const e=b.target;
+      if(!e||e.dead){ b.hit=true; continue; }
+      const dx=e.pos.x-b.x, dy=e.pos.y-b.y, d=Math.hypot(dx,dy);
+      const step=b.spd*dt;
+      if(d<=step+e.r*0.5){
+        b.hit=true;
+        hurt(e,b.dmg,now);
+        if(b.kind==='frost'&&!e.dead){
+          e.slowUntil=now+b.st; e.slowF=b.slow;
+          boom(e.pos.x,e.pos.y,e.r+6,'#9fd0ff');
+        }
+      }else{
+        b.x+=dx/d*step; b.y+=dy/d*step;
+      }
+    }
+  }
+  G.bullets=G.bullets.filter(b=>!b.hit);
+}
+
+/* ================= 特效 ================= */
+function boom(x,y,r,color){ G.fx.push({x,y,r,color,t:0,life:.32}); }
+function addFloat(x,y,txt,color){ G.floats.push({x,y,txt,color,t:0,life:.9}); }
+
+/* ================= 主循环 ================= */
+function tick(ts){
+  if(!running) return;
+  requestAnimationFrame(tick);
+  const now=ts/1000;
+  let dt=Math.min(0.05,now-(lastT||now));
+  lastT=now;
+  if(paused||!G) { draw(now); return; }
+  update(dt,now);
+  draw(now);
+}
+
+function update(dt,now){
+  if(G.over) return;
+  const w=G.wave;
+
+  /* 波推进 */
+  if(G.phase==='idle'){
+    G.countdown-=dt;
+    const info=document.getElementById('waveInfo');
+    info.textContent='第 '+(w+1)+' 波来袭倒计时 '+Math.ceil(Math.max(0,G.countdown))+'s';
+    if(G.countdown<=0) startWave();
+  }else if(G.phase==='spawning'){
+    G.spawnGap-=dt;
+    if(G.spawnGap<=0&&G.spawnIdx<G.queue.length){
+      spawnEnemy(G.queue[G.spawnIdx],w);
+      G.spawnIdx++;
+      G.spawnGap=0.6;
+    }
+    if(G.spawnIdx>=G.queue.length&&G.enemies.length===0){
+      // 波清空奖励
+      const bonus=20+w*3;
+      G.gold+=bonus;
+      addFloat(W/2,H/2,'波次奖励 +'+bonus,'#f3ce6a');
+      G.phase='idle'; G.countdown=5;
+      G.score=calcScore(G);
+      updateHUD();
+      document.getElementById('waveInfo').textContent='第 '+(G.wave+1)+' 波来袭倒计时 5s';
+      if(G.wave>0 && G.wave%10===0) milestone();
+    }
+  }
+
+  /* 敌人移动 */
+  for(const e of G.enemies) if(!e.dead) moveEnemy(e,dt);
+  G.enemies=G.enemies.filter(e=>!e.dead);
+
+  /* 塔攻击（含后坐衰减） */
+  for(const t of G.towers){
+    if(t.recoil) t.recoil=Math.max(0,t.recoil-dt*5);
+    towerFire(t,dt,now);
+  }
+
+  /* 子弹 */
+  moveBullets(dt,now);
+
+  /* 特效 */
+  for(const f of G.fx) f.t+=dt;
+  G.fx=G.fx.filter(f=>f.t<f.life);
+  for(const f of G.floats){ f.t+=dt; f.y-=26*dt; }
+  G.floats=G.floats.filter(f=>f.t<f.life);
+}
+
+function startWave(){
+  G.wave++;
+  G.queue=buildWave(G.wave);
+  G.spawnIdx=0; G.spawnGap=0.5; G.phase='spawning';
+  addFloat(W/2,60,'第 '+G.wave+' 波来袭！','#ffd97a');
+  updateHUD();
+}
+
+/* ================= 绘制 ================= */
+function draw(now){
+  ctx.clearRect(0,0,W,H);
+  /* 草地棋盘格 */
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    ctx.fillStyle=((r+c)%2===0)?'#1c2b1c':'#1a271a';
+    ctx.fillRect(c*CELL,r*CELL,CELL,CELL);
+  }
+  /* 可建空地高亮虚格 */
+  if(G){
+    const hasTower=(c,r)=>G.towers.some(t=>t.c===c&&t.r===r);
+    ctx.save();
+    ctx.setLineDash([4,4]);
+    ctx.lineWidth=1;
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(pathCells.has(c+','+r)||hasTower(c,r)) continue;
+      ctx.fillStyle='rgba(220,255,220,.05)';
+      ctx.fillRect(c*CELL+4,r*CELL+4,CELL-8,CELL-8);
+      ctx.strokeStyle='rgba(190,230,190,.30)';
+      ctx.strokeRect(c*CELL+4.5,r*CELL+4.5,CELL-9,CELL-9);
+    }
+    ctx.restore();
+  }
+  /* 谷道 */
+  ctx.strokeStyle='#4a5b38'; ctx.lineWidth=CELL-10; ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.beginPath(); ctx.moveTo(WPX[0].x,WPX[0].y);
+  for(let i=1;i<WPX.length;i++) ctx.lineTo(WPX[i].x,WPX[i].y);
+  ctx.stroke();
+  ctx.strokeStyle='#5a6c46'; ctx.lineWidth=CELL-22;
+  ctx.beginPath(); ctx.moveTo(WPX[0].x,WPX[0].y);
+  for(let i=1;i<WPX.length;i++) ctx.lineTo(WPX[i].x,WPX[i].y);
+  ctx.stroke();
+  /* 入口/军营（完整落在画布内，不被边缘裁切） */
+  drawGate(WPX[1].x, 10, '#d0603a', '敌');
+  drawGate(WPX[WPX.length-1].x, 404, '#4a9fe0', '营');
+
+  /* 选中格/选中塔高亮 */
+  if(G&&G.sel){
+    const s=G.sel;
+    ctx.fillStyle='rgba(240,220,120,.16)';
+    ctx.fillRect(s.c*CELL,s.r*CELL,CELL,CELL);
+    ctx.strokeStyle='#f0dc78'; ctx.lineWidth=2;
+    ctx.strokeRect(s.c*CELL+1,s.r*CELL+1,CELL-2,CELL-2);
+  }
+  if(G&&G.selTower){
+    const t=G.selTower, st=towerStat(t);
+    ctx.beginPath(); ctx.arc(t.x,t.y,st.range,0,Math.PI*2);
+    ctx.strokeStyle='rgba(200,230,200,.4)'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle='rgba(200,230,200,.07)'; ctx.fill();
+  }
+
+  /* 塔 */
+  if(G) for(const t of G.towers) drawTower(t,now);
+
+  /* 敌人 */
+  if(G) for(const e of G.enemies) drawEnemy(e,now);
+
+  /* 子弹 */
+  if(G) for(const b of G.bullets){
+    ctx.fillStyle=b.color;
+    ctx.beginPath(); ctx.arc(b.x,b.y,b.kind==='shell'?5:3,0,Math.PI*2); ctx.fill();
+  }
+
+  /* 爆炸特效 */
+  if(G) for(const f of G.fx){
+    const p=f.t/f.life;
+    ctx.strokeStyle=f.color; ctx.globalAlpha=1-p;
+    ctx.beginPath(); ctx.arc(f.x,f.y,f.r*(0.4+p*0.8),0,Math.PI*2);
+    ctx.lineWidth=3; ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+  /* 飘字 */
+  if(G) for(const f of G.floats){
+    const p=f.t/f.life;
+    ctx.globalAlpha=1-p;
+    ctx.fillStyle=f.color; ctx.font='bold 15px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(f.txt,f.x,f.y);
+    ctx.globalAlpha=1;
+  }
+}
+
+function drawGate(x,y,color,label){
+  ctx.fillStyle=color;
+  ctx.beginPath(); ctx.arc(x,y+8,16,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#101410'; ctx.font='bold 14px sans-serif'; ctx.textAlign='center';
+  ctx.fillText(label,x,y+13);
+}
+
+function drawTower(t,now){
+  const d=TOWERS[t.type];
+  const ang=(t.ang===undefined)?-Math.PI/2:t.ang;
+  const lvl=t.lvl||0;
+  /* 底座：等级越高越华丽（Lv3 金边+金环） */
+  ctx.fillStyle=['#2a382a','#324232','#3a4a36'][lvl];
+  ctx.beginPath(); ctx.roundRect(t.x-17,t.y-17,34,34,7); ctx.fill();
+  ctx.strokeStyle=lvl===2?'#f0dc78':d.color;
+  ctx.lineWidth=2+lvl*0.5;
+  ctx.beginPath(); ctx.roundRect(t.x-17,t.y-17,34,34,7); ctx.stroke();
+  if(lvl===2){
+    ctx.strokeStyle='rgba(240,220,120,.4)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.roundRect(t.x-14.5,t.y-14.5,29,29,5); ctx.stroke();
+  }
+  if(t.type==='arrow') drawArrowTower(t,ang,lvl);
+  else if(t.type==='cannon') drawCannonTower(t,ang,lvl,now);
+  else drawFrostTower(t,now,lvl);
+  /* 等级点 */
+  ctx.fillStyle='#f0dc78';
+  for(let i=0;i<lvl+1;i++){
+    ctx.beginPath(); ctx.arc(t.x-8+i*8,t.y+22,2.4,0,Math.PI*2); ctx.fill();
+  }
+}
+
+/* 箭塔：Lv1朴素弓箭 → Lv2亮色双层弓+翎羽箭 → Lv3金弓金箭+金珠+宝石 */
+function drawArrowTower(t,ang,lvl){
+  const bowC=['#4caf7d','#5fc28c','#e0b848'][lvl];
+  const trimC=['#6fd49f','#7fdda9','#f0dc78'][lvl];
+  ctx.save(); ctx.translate(t.x,t.y); ctx.rotate(ang);
+  /* 弦 */
+  ctx.strokeStyle='#e8e8c0'; ctx.lineWidth=1.2;
+  ctx.beginPath();
+  ctx.moveTo(11*Math.cos(-1.75),11*Math.sin(-1.75));
+  ctx.lineTo(11*Math.cos(1.75),11*Math.sin(1.75));
+  ctx.stroke();
+  /* 弓弧（Lv2+ 加内衬弧） */
+  ctx.strokeStyle=bowC; ctx.lineWidth=2.6; ctx.lineCap='round';
+  ctx.beginPath(); ctx.arc(0,0,11,-1.75,1.75); ctx.stroke();
+  if(lvl>=1){
+    ctx.strokeStyle=trimC; ctx.lineWidth=1.1;
+    ctx.beginPath(); ctx.arc(0,0,9,-1.7,1.7); ctx.stroke();
+  }
+  if(lvl===2){ /* Lv3 弧上金珠 */
+    ctx.fillStyle='#f0dc78';
+    for(const a of [-0.95,0,0.95]){
+      ctx.beginPath(); ctx.arc(Math.cos(a)*11,Math.sin(a)*11,1.5,0,Math.PI*2); ctx.fill();
+    }
+  }
+  /* 箭杆 */
+  ctx.strokeStyle='#e8e8c0'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(-6,0); ctx.lineTo(12,0); ctx.stroke();
+  /* 箭尾翎羽（Lv2+） */
+  if(lvl>=1){
+    ctx.strokeStyle=trimC; ctx.lineWidth=1.4;
+    for(const dy of [-2.7,2.7]){
+      ctx.beginPath(); ctx.moveTo(-4,dy); ctx.lineTo(-8.5,dy*1.9); ctx.stroke();
+    }
+  }
+  /* 箭头（Lv3 金箭头） */
+  ctx.fillStyle=lvl===2?'#e8b848':'#e8e8c0';
+  ctx.beginPath(); ctx.moveTo(15.5,0); ctx.lineTo(10.5,-3.6); ctx.lineTo(10.5,3.6); ctx.closePath(); ctx.fill();
+  /* Lv3 中心宝石 */
+  if(lvl===2){
+    ctx.fillStyle='#4caf7d';
+    ctx.beginPath(); ctx.arc(2,0,2.1,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* 炮塔：Lv1标准炮 → Lv2亮管加长三箍 → Lv3金管豪华炮（八螺栓+金饰） */
+function drawCannonTower(t,ang,lvl,now){
+  const d=TOWERS.cannon;
+  const tubeC=[d.color,'#e09440','#e8b848'][lvl];
+  const metalA=['#a06a28','#a06a28','#c09030'][lvl];   // 耳轴/炮尾/环缘
+  const metalB=['#8a5a20','#96682a','#b08030'][lvl];  // 管箍/描边
+  const rec=(t.recoil||0)*4;
+  const R=lvl===2?14.5:13.5;
+  /* 炮座圆盘（两层；Lv3 更大） */
+  ctx.fillStyle='#223022';
+  ctx.beginPath(); ctx.arc(t.x,t.y,R,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#2f422f';
+  ctx.beginPath(); ctx.arc(t.x,t.y,R-3.5,0,Math.PI*2); ctx.fill();
+  /* 座盘螺栓（Lv3 八颗） */
+  ctx.fillStyle='#1a241a';
+  const nB=lvl===2?8:6;
+  for(let i=0;i<nB;i++){
+    const ba=i*Math.PI*2/nB+0.32;
+    ctx.beginPath(); ctx.arc(t.x+Math.cos(ba)*(R-1.5),t.y+Math.sin(ba)*(R-1.5),1.6,0,Math.PI*2); ctx.fill();
+  }
+  ctx.save(); ctx.translate(t.x,t.y); ctx.rotate(ang);
+  /* 炮耳轴（等级越高越大） */
+  ctx.fillStyle=metalA;
+  const earR=[2.4,2.8,3.3][lvl];
+  ctx.fillRect(-6.5,-9.5,3,19);
+  ctx.beginPath(); ctx.arc(-5,-9.5,earR,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(-5,9.5,earR,0,Math.PI*2); ctx.fill();
+  /* 炮尾 */
+  ctx.beginPath(); ctx.roundRect(-12-rec,-4.5,7,9,2); ctx.fill();
+  /* 炮管（锥形：根部粗、口部细；等级加长加粗） */
+  const tip=[23,24.5,26][lvl];
+  const rootW=[4.8,5.2,5.6][lvl];
+  ctx.fillStyle=tubeC;
+  ctx.beginPath();
+  ctx.moveTo(-6-rec,-rootW);
+  ctx.lineTo(tip-rec,-3.5);
+  ctx.lineTo(tip-rec,3.5);
+  ctx.lineTo(-6-rec,rootW);
+  ctx.closePath(); ctx.fill();
+  /* 管箍（Lv1 两道，Lv2+ 三道） */
+  ctx.fillStyle=metalB;
+  const hoops=lvl===0?[5,13]:[4,10,16];
+  for(const h of hoops) ctx.fillRect(h-rec,-4.6,2.2,9.2);
+  /* 喇叭口炮口（平滑外扩） */
+  const flare=[6.6,7,7.5][lvl];
+  const mouth=tip+6;
+  ctx.fillStyle=tubeC;
+  ctx.beginPath();
+  ctx.moveTo(tip-rec,-3.5);
+  ctx.quadraticCurveTo(tip+4-rec,-flare, mouth-rec,-flare);
+  ctx.lineTo(mouth-rec,flare);
+  ctx.quadraticCurveTo(tip+4-rec,flare, tip-rec,3.5);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle=metalB; ctx.lineWidth=1.2;
+  ctx.stroke();
+  /* 炮口：金属环缘 + 椭圆开孔 */
+  ctx.fillStyle=metalA;
+  ctx.beginPath(); ctx.ellipse(tip+4.2-rec,0,3.3,5.9,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#0d120c';
+  ctx.beginPath(); ctx.ellipse(tip+4.2-rec,0,2.1,4.5,0,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+  /* 中心炮门块（Lv3 金核） */
+  ctx.fillStyle=tubeC;
+  ctx.beginPath(); ctx.arc(t.x,t.y,5.5,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#141a10';
+  ctx.beginPath(); ctx.arc(t.x,t.y,2,0,Math.PI*2); ctx.fill();
+  if(lvl===2){
+    ctx.fillStyle='#f0dc78';
+    ctx.beginPath(); ctx.arc(t.x,t.y,1,0,Math.PI*2); ctx.fill();
+  }
+  /* 炮口火光（开火后120ms） */
+  if(t.muzzleT!==undefined && (now||0)-t.muzzleT<0.12){
+    const fp=1-((now||0)-t.muzzleT)/0.12;
+    ctx.save(); ctx.translate(t.x,t.y); ctx.rotate(ang);
+    ctx.fillStyle='rgba(255,214,102,'+(fp*0.95).toFixed(3)+')';
+    ctx.beginPath();
+    ctx.moveTo(mouth-rec,0);
+    ctx.lineTo(mouth-rec+12*fp,-6.5*fp);
+    ctx.lineTo(mouth-rec+16*fp,0);
+    ctx.lineTo(mouth-rec+12*fp,6.5*fp);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle='rgba(255,246,200,'+(fp*0.9).toFixed(3)+')';
+    ctx.beginPath(); ctx.arc(mouth+1.5-rec,0,3.5*fp,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* 冰塔：Lv1朴素六枝 → Lv2大雪花+小杈+六角冰核 → Lv3华丽冰晶+冰珠环+光晕+冰钻 */
+function drawFrostTower(t,now,lvl){
+  const coreC=['#4a9fe0','#5ab0f0','#7ec8ff'][lvl];
+  /* Lv3 光晕 */
+  if(lvl===2){
+    const g=ctx.createRadialGradient(t.x,t.y,4,t.x,t.y,21);
+    g.addColorStop(0,'rgba(126,200,255,.30)');
+    g.addColorStop(1,'rgba(126,200,255,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(t.x,t.y,21,0,Math.PI*2); ctx.fill();
+  }
+  ctx.save(); ctx.translate(t.x,t.y); ctx.rotate((now||0)*0.5);
+  /* Lv3 外围冰珠环 */
+  if(lvl===2){
+    ctx.fillStyle='#b8dcff';
+    for(let i=0;i<8;i++){
+      const a=i*Math.PI/4+0.39;
+      ctx.beginPath(); ctx.arc(Math.cos(a)*15.5,Math.sin(a)*15.5,1.4,0,Math.PI*2); ctx.fill();
+    }
+  }
+  /* 主雪花枝（等级越高越大越密） */
+  const len=12+lvl;
+  for(let i=0;i<6;i++){
+    const a=i*Math.PI/3;
+    ctx.strokeStyle=coreC; ctx.lineCap='round';
+    ctx.lineWidth=2+lvl*0.4;
+    ctx.beginPath(); ctx.moveTo(0,0);
+    ctx.lineTo(Math.cos(a)*len,Math.sin(a)*len); ctx.stroke();
+    if(lvl===0){
+      /* Lv1：枝端小冰点（朴素） */
+      ctx.fillStyle=coreC;
+      ctx.beginPath(); ctx.arc(Math.cos(a)*len,Math.sin(a)*len,1.6,0,Math.PI*2); ctx.fill();
+    }else{
+      /* Lv2 一层杈 / Lv3 两层杈 */
+      const bx=Math.cos(a)*(len-4.5), by=Math.sin(a)*(len-4.5);
+      ctx.lineWidth=1.6+lvl*0.2;
+      const das=lvl===1?[0.55,-0.55]:[0.42,-0.42,0.8,-0.8];
+      for(const da of das){
+        ctx.beginPath(); ctx.moveTo(bx,by);
+        ctx.lineTo(bx+Math.cos(a+da)*5,by+Math.sin(a+da)*5); ctx.stroke();
+      }
+    }
+  }
+  /* 中心：Lv1 小点 / Lv2 六角冰核 / Lv3 发光冰钻 */
+  if(lvl===0){
+    ctx.fillStyle=coreC;
+    ctx.beginPath(); ctx.arc(0,0,2.2,0,Math.PI*2); ctx.fill();
+  }else if(lvl===1){
+    ctx.fillStyle='#b8dcff';
+    ctx.beginPath();
+    for(let i=0;i<6;i++){
+      const a=i*Math.PI/3+Math.PI/6;
+      const px=Math.cos(a)*4.4, py=Math.sin(a)*4.4;
+      i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+    }
+    ctx.closePath(); ctx.fill();
+  }else{
+    ctx.fillStyle='#dcecff';
+    ctx.beginPath();
+    ctx.moveTo(0,-6.5); ctx.lineTo(4.2,0); ctx.lineTo(0,6.5); ctx.lineTo(-4.2,0);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#7ec8ff';
+    ctx.beginPath(); ctx.arc(0,0,1.9,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawEnemy(e,now){
+  const slowed=(performance.now()/1000)<e.slowUntil;
+  ctx.fillStyle=e.color;
+  ctx.beginPath(); ctx.arc(e.pos.x,e.pos.y,e.r,0,Math.PI*2); ctx.fill();
+  if(slowed){
+    ctx.strokeStyle='#9fd0ff'; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.arc(e.pos.x,e.pos.y,e.r+3,0,Math.PI*2); ctx.stroke();
+  }
+  if(e.type==='tank'||e.type==='boss'){
+    ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(e.pos.x,e.pos.y,e.r-4,0,Math.PI*2); ctx.stroke();
+  }
+  /* 血条 */
+  const w=e.r*2.2, h=4, hp=Math.max(0,e.hp/e.hpMax);
+  ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(e.pos.x-w/2,e.pos.y-e.r-9,w,h);
+  ctx.fillStyle=hp>0.5?'#6fce6f':hp>0.25?'#e0c04a':'#e06a4a';
+  ctx.fillRect(e.pos.x-w/2,e.pos.y-e.r-9,w*hp,h);
+}
+
+/* ================= HUD 与交互 ================= */
+function updateHUD(){
+  if(!G) return;
+  document.getElementById('hGold').textContent=G.gold;
+  document.getElementById('hLife').textContent=G.lives;
+  document.getElementById('hWave').textContent=G.wave;
+  document.getElementById('hScore').textContent=calcScore(G);
+}
+
+function canvasPos(ev){
+  const r=cv.getBoundingClientRect();
+  return { x:(ev.clientX-r.left)*(W/r.width), y:(ev.clientY-r.top)*(H/r.height) };
+}
+
+cv.addEventListener('pointerdown',ev=>{
+  ev.preventDefault();
+  if(!G||G.over||paused) return;
+  const p=canvasPos(ev);
+  const c=Math.floor(p.x/CELL), r=Math.floor(p.y/CELL);
+  if(c<0||c>=COLS||r<0||r>=ROWS) return;
+  /* 命中塔？ */
+  const t=G.towers.find(t=>t.c===c&&t.r===r);
+  if(t){ selectTower(t); return; }
+  if(pathCells.has(c+','+r)){ G.sel=null; G.selTower=null; hideSheets(); return; }
+  /* 空地 → 建塔面板 */
+  G.sel={c,r}; G.selTower=null;
+  showBuildSheet();
+}, {passive:false});
+
+function hideSheets(){
+  document.getElementById('buildSheet').classList.remove('on');
+  document.getElementById('towerSheet').classList.remove('on');
+}
+
+/* 建塔面板 */
+function showBuildSheet(){
+  hideSheets();
+  const box=document.getElementById('buildCards');
+  box.innerHTML='';
+  for(const key of Object.keys(TOWERS)){
+    const d=TOWERS[key];
+    const afford=G.gold>=d.cost;
+    const el=document.createElement('div');
+    el.className='tcard'+(afford?'':' off');
+    el.innerHTML='<div class="tn" style="color:'+d.color+'">'+d.name+'</div>'+
+      '<div class="td">'+d.desc+'</div><div class="tc">'+d.cost+'</div>';
+    el.addEventListener('click',()=>{
+      if(!G.sel){ hideSheets(); return; }
+      if(G.gold<d.cost){ addFloat(W/2,H/2,'金币不足','#ff9d9d'); return; }
+      G.gold-=d.cost;
+      const nc=G.sel.c, nr=G.sel.r;
+      G.towers.push({type:key,c:nc,r:nr,x:nc*CELL+CELL/2,y:nr*CELL+CELL/2,lvl:0,lastFire:0,ang:-Math.PI/2});
+      boom(nc*CELL+CELL/2,nr*CELL+CELL/2,26,d.color);
+      G.sel=null; hideSheets(); updateHUD();
+    });
+    box.appendChild(el);
+  }
+  document.getElementById('buildSheet').classList.add('on');
+}
+
+function selectTower(t){
+  G.selTower=t; G.sel=null;
+  hideSheets();
+  const d=TOWERS[t.type], st=towerStat(t);
+  document.getElementById('towerTitle').textContent=d.name+' Lv'+(t.lvl+1);
+  let info='伤害 '+st.dmg+' · 射速 '+st.rate+'/s · 射程 '+st.range;
+  if(st.slow) info+=' · 减速至'+Math.round(st.slow*100)+'%';
+  if(st.blast) info+=' · 溅射半径 '+st.blast;
+  info+='<br>已投入 '+towerSpent(t)+'，拆除返还 '+Math.floor(towerSpent(t)*0.7);
+  document.getElementById('towerInfo').innerHTML=info;
+  const upBtn=document.getElementById('upBtn');
+  if(t.lvl<2){
+    const cost=d.up[t.lvl];
+    upBtn.textContent='升级 Lv'+(t.lvl+2)+'（'+cost+'）';
+    upBtn.style.display='block';
+    upBtn.onclick=()=>{
+      if(G.gold<cost){ addFloat(W/2,H/2,'金币不足','#ff9d9d'); return; }
+      G.gold-=cost; t.lvl++;
+      boom(t.x,t.y,26,'#f0dc78');
+      selectTower(t); updateHUD();
+    };
+  }else{
+    upBtn.style.display='none';
+  }
+  document.getElementById('sellBtn').textContent='拆除返还 '+Math.floor(towerSpent(t)*0.7);
+  document.getElementById('sellBtn').onclick=()=>{
+    G.gold+=Math.floor(towerSpent(t)*0.7);
+    G.towers=G.towers.filter(x=>x!==t);
+    G.selTower=null; hideSheets(); updateHUD();
+  };
+  document.getElementById('towerSheet').classList.add('on');
+}
+
+/* 立即出怪 */
+document.getElementById('callBtn').addEventListener('click',()=>{
+  if(!G||G.over) return;
+  if(G.phase==='idle') G.countdown=0.01;
+});
+
+/* 暂停 */
+document.getElementById('pauseBtn').addEventListener('click',()=>{
+  if(!G||G.over) return;
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'Ⅱ';
+  if(paused) Music.pause(); else Music.unpause();
+});
+
+/* 音乐开关 */
+document.getElementById('musicBtn').addEventListener('click',()=>{
+  const on=Music.toggle();
+  const btn=document.getElementById('musicBtn');
+  btn.classList.toggle('off',!on);
+  btn.textContent=on?'♪':'静';
+});
+
+/* ================= 榜单数据层：优先联机榜，无后端自动降级本机榜 ================= */
+const LocalBoard={
+  KEY:'td_local_board',
+  load(){ try{ const d=JSON.parse(localStorage.getItem(this.KEY)||'{}'); return Array.isArray(d.scores)?d.scores:[]; }catch(e){ return []; } },
+  save(scores){ try{ localStorage.setItem(this.KEY,JSON.stringify({scores})); }catch(e){} },
+  upsert(rec){
+    const scores=this.load();
+    const i=scores.findIndex(s=>s.name===rec.name);
+    if(i<0) scores.push(rec);
+    else if((scores[i].score||0)<(rec.score||0)) scores[i]=rec;
+    else if(rec.province) scores[i].province=scores[i].province||rec.province;
+    this.save(scores);
+  },
+  top(n){
+    const s=this.load().slice().sort((a,b)=>(b.score||0)-(a.score||0));
+    s.forEach((x,i)=>x.rank=i+1);
+    return n?s.slice(0,n):s;
+  },
+  provStandings(){
+    const agg={};
+    for(const s of this.load()){
+      const p=s.province||''; if(!p) continue;
+      const a=agg[p]||(agg[p]={province:p,total:0,players:0});
+      a.total+=s.score||0; a.players++;
+    }
+    const arr=Object.values(agg).sort((a,b)=>(b.total-a.total)||(a.province<b.province?-1:1));
+    arr.forEach((x,i)=>x.rank=i+1);
+    return arr;
+  }
+};
+
+const API={
+  async submitScore(rec){
+    try{
+      const res=await fetch('/api/score',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(rec),
+      });
+      const data=await res.json();
+      if(data&&data.ok) return {ok:true,mode:'server'};
+      throw new Error('bad');
+    }catch(e){
+      LocalBoard.upsert(rec);
+      return {ok:true,mode:'local'};
+    }
+  },
+  async fetchBoard(){
+    try{
+      const res=await fetch('/api/scores');
+      const data=await res.json();
+      if(data&&data.ok) return {ok:true,mode:'server',scores:data.scores||[],provinces:data.provinces||[]};
+      throw new Error('bad');
+    }catch(e){
+      return {ok:true,mode:'local',scores:LocalBoard.top(100),provinces:LocalBoard.provStandings()};
+    }
+  }
+};
+
+/* ================= 省份排名 / 存档续玩 ================= */
+const PROVINCES=['广东省','江苏省','山东省','浙江省','河南省','四川省','湖北省','湖南省','河北省','福建省','安徽省','辽宁省','陕西省','江西省','云南省','广西壮族自治区','贵州省','山西省','重庆市','天津市','北京市','上海市','内蒙古自治区','吉林省','黑龙江省','海南省','甘肃省','青海省','新疆维吾尔自治区','西藏自治区','宁夏回族自治区','中国香港','中国澳门','中国台湾'];
+const PROV_SHORT={'广西壮族自治区':'广西','新疆维吾尔自治区':'新疆','内蒙古自治区':'内蒙古','宁夏回族自治区':'宁夏','西藏自治区':'西藏','中国香港':'香港','中国澳门':'澳门','中国台湾':'台湾'};
+const provShort=p=>PROV_SHORT[p]||(p||'').slice(0,2);
+
+function fillProvSel(sel,withPlaceholder){
+  sel.innerHTML='';
+  if(withPlaceholder){
+    const o=document.createElement('option');
+    o.value=''; o.textContent='选择省份/地区（可选）';
+    sel.appendChild(o);
+  }
+  for(const p of PROVINCES){
+    const o=document.createElement('option');
+    o.value=p; o.textContent=p;
+    sel.appendChild(o);
+  }
+  const saved=localStorage.getItem('td_province');
+  if(saved && PROVINCES.includes(saved)) sel.value=saved;
+}
+
+let toastTimer=null;
+function showToast(txt,ms){
+  const t=document.getElementById('toast');
+  t.textContent=txt; t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('on'),ms||4000);
+}
+
+function pauseForPanel(){
+  paused=true;
+  document.getElementById('pauseBtn').textContent='▶';
+  Music.pause();
+}
+function resumeFromPanel(){
+  paused=false;
+  document.getElementById('pauseBtn').textContent='Ⅱ';
+  Music.unpause();
+}
+
+/* ---- 每10波排名记录 ---- */
+function milestone(){
+  G.score=calcScore(G);
+  const name=localStorage.getItem('td_name');
+  if(name){
+    submitRank(name,localStorage.getItem('td_province')||'');
+    return;
+  }
+  pauseForPanel();
+  document.getElementById('mileTitle').textContent='第'+G.wave+'波达成 · 记录排名';
+  document.getElementById('mileStats').textContent='击杀 '+G.kills+' · 当前得分 '+G.score+' · 生命 '+G.lives;
+  const mi=document.getElementById('mNameInput');
+  mi.value=''; mi.placeholder='输入昵称（本局起自动记录）';
+  fillProvSel(document.getElementById('mProvSel'),false);
+  showPanel('mileBox');
+}
+
+document.getElementById('mSkipBtn').addEventListener('click',()=>{
+  hideOverlay(); resumeFromPanel();
+});
+
+document.getElementById('mSaveBtn').addEventListener('click',async()=>{
+  const name=document.getElementById('mNameInput').value.trim();
+  if(!name){ document.getElementById('mNameInput').placeholder='请先输入昵称'; return; }
+  const prov=document.getElementById('mProvSel').value;
+  localStorage.setItem('td_name',name);
+  localStorage.setItem('td_province',prov);
+  const btn=document.getElementById('mSaveBtn');
+  btn.disabled=true; btn.textContent='记录中…';
+  await submitRank(name,prov);
+  btn.disabled=false; btn.textContent='记录我的排名';
+  hideOverlay(); resumeFromPanel();
+});
+
+async function submitRank(name,prov){
+  const rec={name,province:prov,score:calcScore(G),wave:G.wave,kills:G.kills};
+  const r=await API.submitScore(rec);
+  if(!r.ok) return;
+  const board=await API.fetchBoard();
+  const scores=board.scores;
+  const scope=board.mode==='local'?'本机榜':'全国';
+  const me=scores.find(s=>s.name===name);
+  let txt='第'+G.wave+'波 · ';
+  if(me){
+    txt+=scope+'第'+me.rank+'名';
+    if(prov){
+      const pr=scores.filter(s=>s.province===prov).findIndex(s=>s.name===name)+1;
+      if(pr>0) txt+=' · '+prov+'第'+pr+'名';
+    }
+  }else{
+    txt+=scope+'百强之外，继续冲！';
+  }
+  showToast(txt,4500);
+  document.getElementById('waveInfo').textContent=txt;
+}
+
+/* ---- 停局保留数据：自动存档 + 继续 ---- */
+let liveGame=false;
+function saveGame(){
+  if(!G||G.over||!liveGame) return;
+  try{
+    const s={
+      gold:G.gold, lives:G.lives, wave:G.wave, kills:G.kills, score:calcScore(G),
+      enemies:G.enemies.map(e=>({type:e.type,seg:e.seg,segT:e.segT,
+        pos:{x:e.pos.x,y:e.pos.y},hp:e.hp,hpMax:e.hpMax,spd:e.spd,slowF:e.slowF,
+        bounty:e.bounty,dmg:e.dmg,r:e.r,color:e.color})),
+      towers:G.towers.map(t=>({type:t.type,c:t.c,r:t.r,x:t.x,y:t.y,lvl:t.lvl,ang:t.ang})),
+      phase:G.phase, countdown:Math.max(0.5,G.countdown),
+      queue:G.queue, spawnGap:G.spawnGap, spawnIdx:G.spawnIdx,
+    };
+    localStorage.setItem('td_save',JSON.stringify(s));
+  }catch(e){}
+}
+setInterval(saveGame,3000);
+
+function readSave(){
+  try{
+    const s=JSON.parse(localStorage.getItem('td_save')||'null');
+    if(s && typeof s.wave==='number' && s.wave>=1 && s.lives>0 && Array.isArray(s.towers)) return s;
+  }catch(e){}
+  return null;
+}
+
+function restoreGame(){
+  const s=readSave();
+  if(!s) return;
+  G=newGame();
+  G.gold=s.gold||150; G.lives=s.lives; G.wave=s.wave; G.kills=s.kills||0;
+  G.enemies=(s.enemies||[]).map(e=>({...e,slowUntil:0,slowF:e.slowF||1,dead:false}));
+  G.towers=(s.towers||[]).map(t=>({...t,lastFire:0}));
+  G.queue=s.queue||[]; G.spawnIdx=s.spawnIdx||0; G.spawnGap=s.spawnGap||0.5;
+  G.phase=s.phase||'idle'; G.countdown=s.countdown||3;
+  G.bullets=[]; G.fx=[]; G.floats=[]; G.sel=null; G.selTower=null;
+  paused=false; liveGame=true;
+  updateHUD(); hideOverlay(); hideSheets();
+  Music.start();
+  document.getElementById('pauseBtn').textContent='Ⅱ';
+  showToast('已恢复进度：第'+G.wave+'波 · 击杀'+G.kills,2500);
+  document.getElementById('waveInfo').textContent='继续上次进度 · 第 '+(G.wave+1)+' 波准备中';
+}
+
+document.getElementById('resumeBtn').addEventListener('click',restoreGame);
+
+/* ================= 开始/结束/排行榜 ================= */
+function showPanel(id){
+  document.getElementById('overlay').classList.add('on');
+  for(const b of ['startBox','endBox','boardBox','mileBox'])
+    document.getElementById(b).style.display=(b===id)?'block':'none';
+}
+function hideOverlay(){ document.getElementById('overlay').classList.remove('on'); }
+
+document.getElementById('startBtn').addEventListener('click',()=>{
+  if(readSave() && !confirm('开始新局将覆盖已保存的进度，确定？')) return;
+  G=newGame(); paused=false; liveGame=true; updateHUD();
+  hideOverlay(); hideSheets();
+  Music.start();
+});
+
+function endGame(){
+  if(G.over) return;
+  G.over=true;
+  G.score=calcScore(G);
+  Music.stop();
+  liveGame=false;
+  try{ localStorage.removeItem('td_save'); }catch(e){}
+  document.getElementById('endSub').textContent='坚守到了第 '+G.wave+' 波 · 击杀 '+G.kills+' 敌军';
+  document.getElementById('eWave').textContent=G.wave*500;
+  document.getElementById('eKill').textContent=G.kills*50;
+  document.getElementById('eLife').textContent=Math.max(0,G.lives)*100;
+  document.getElementById('eGold').textContent=Math.floor(Math.max(0,G.gold));
+  document.getElementById('eTotal').textContent=G.score;
+  const btn=document.getElementById('submitBtn');
+  btn.disabled=false; btn.textContent='提交成绩';
+  document.getElementById('nameInput').value=localStorage.getItem('td_name')||'';
+  const savedProv=localStorage.getItem('td_province');
+  if(savedProv && PROVINCES.includes(savedProv)) document.getElementById('eProvSel').value=savedProv;
+  showPanel('endBox');
+}
+
+document.getElementById('submitBtn').addEventListener('click',async()=>{
+  if(!G||G.submitted) return;
+  const name=document.getElementById('nameInput').value.trim();
+  if(!name){ document.getElementById('nameInput').placeholder='请先输入昵称'; return; }
+  const prov=document.getElementById('eProvSel').value;
+  localStorage.setItem('td_name',name);
+  if(prov) localStorage.setItem('td_province',prov);
+  const btn=document.getElementById('submitBtn');
+  btn.disabled=true; btn.textContent='提交中…';
+  const r=await API.submitScore({name,province:prov,score:G.score,wave:G.wave,kills:G.kills});
+  if(r.ok){ G.submitted=true; btn.textContent='已上榜'; showBoard(); }
+  else{ btn.disabled=false; btn.textContent='提交失败，重试'; }
+});
+
+document.getElementById('againBtn').addEventListener('click',()=>{
+  G=newGame(); paused=false; liveGame=true; updateHUD(); hideOverlay(); hideSheets();
+  Music.start();
+});
+
+async function showBoard(){
+  showPanel('boardBox');
+  const list=document.getElementById('rankList');
+  const provList=document.getElementById('provList');
+  list.innerHTML='<div class="rankEmpty">读取中…</div>';
+  provList.innerHTML='';
+  const data=await API.fetchBoard();
+  const sub=document.querySelector('#boardBox .sub');
+  if(sub) sub.textContent=data.mode==='local'?'本机榜（仅存本浏览器）· 同名保留最高分':'同昵称只保留最高分';
+  if(!data.scores.length){
+    list.innerHTML='<div class="rankEmpty">暂无成绩，等你来开荒！</div>';
+  }else{
+    list.innerHTML='';
+    data.scores.slice(0,20).forEach(s=>{
+      const row=document.createElement('div');
+      row.className='rankRow';
+      const pc=s.province?'<span class="pc">'+provShort(s.province)+'</span>':'';
+      row.innerHTML='<div class="rk">'+s.rank+'</div>'+pc+'<div class="nm"></div>'+
+        '<div class="sc">'+s.score+'</div><div class="wv">第'+s.wave+'波</div>';
+      row.querySelector('.nm').textContent=s.name;
+      list.appendChild(row);
+    });
+  }
+  if(!data.provinces||!data.provinces.length){
+    provList.innerHTML='<div class="rankEmpty">暂无省份数据，留名时选择省份即可点亮</div>';
+  }else{
+    provList.innerHTML='';
+    data.provinces.forEach(p=>{
+      const row=document.createElement('div');
+      row.className='provRow';
+      row.innerHTML='<div class="rk">'+p.rank+'</div><div class="nm"></div>'+
+        '<div class="sc">总分'+p.total+'</div><div class="wv">'+p.players+'人</div>';
+      row.querySelector('.nm').textContent=p.province+(p.rank===1?'（第1名）':'');
+      provList.appendChild(row);
+    });
+  }
+}
+
+document.getElementById('tabInd').addEventListener('click',()=>{
+  document.getElementById('tabInd').classList.add('on');
+  document.getElementById('tabProv').classList.remove('on');
+  document.getElementById('rankList').style.display='block';
+  document.getElementById('provList').style.display='none';
+});
+document.getElementById('tabProv').addEventListener('click',()=>{
+  document.getElementById('tabProv').classList.add('on');
+  document.getElementById('tabInd').classList.remove('on');
+  document.getElementById('rankList').style.display='none';
+  document.getElementById('provList').style.display='block';
+});
+document.getElementById('boardBtn1').addEventListener('click',showBoard);
+document.getElementById('boardBtn2').addEventListener('click',()=>{
+  if(G&&G.over&&!G.submitted) showPanel('endBox');
+  else if(G&&G.over) showPanel('endBox');
+  else showPanel('startBox');
+});
+
+/* ================= 背景音乐（Web Audio 程序化合成，无外部文件） ================= */
+const Music=(()=>{
+  let ac=null, master=null, timer=null, step=0, nextT=0, noiseBuf=null, playing=false;
+  const BPM=146, STEPD=60/BPM/4, TOTAL=32;
+  const F=n=>440*Math.pow(2,(n-69)/12);
+  const chordRoots=[57,57,53,55];                    // A A F G：小调紧张推进感
+  const chordTones=[[57,60,64],[57,60,64],[53,57,60],[55,59,62]];
+  const arpIdx=[0,1,2,1,0,1,2,1];
+  function ensure(){
+    if(!ac){
+      const AC=window.AudioContext||window.webkitAudioContext;
+      ac=new AC();
+      master=ac.createGain(); master.gain.value=0.2; master.connect(ac.destination);
+      noiseBuf=ac.createBuffer(1,Math.floor(ac.sampleRate*0.08),ac.sampleRate);
+      const d=noiseBuf.getChannelData(0);
+      for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+    }
+    if(ac.state==='suspended') ac.resume();
+  }
+  function tone(t,f,dur,type,vol){
+    const o=ac.createOscillator(), g=ac.createGain();
+    o.type=type; o.frequency.value=f;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.linearRampToValueAtTime(vol,t+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t+dur+0.05);
+  }
+  function kick(t){
+    const o=ac.createOscillator(), g=ac.createGain();
+    o.type='sine';
+    o.frequency.setValueAtTime(150,t);
+    o.frequency.exponentialRampToValueAtTime(45,t+0.13);
+    g.gain.setValueAtTime(0.7,t);
+    g.gain.exponentialRampToValueAtTime(0.001,t+0.17);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t+0.22);
+  }
+  function hat(t){
+    const s=ac.createBufferSource(); s.buffer=noiseBuf;
+    const f=ac.createBiquadFilter(); f.type='highpass'; f.frequency.value=6000;
+    const g=ac.createGain();
+    g.gain.setValueAtTime(0.09,t);
+    g.gain.exponentialRampToValueAtTime(0.001,t+0.035);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t); s.stop(t+0.05);
+  }
+  function playStep(i,t){
+    if(i%8===0||i%8===4) kick(t);
+    if(i%2===0) hat(t);
+    const ch=(i>>3)%chordRoots.length;
+    if(i%4===0) tone(t,F(chordRoots[ch]-24),STEPD*1.7,'triangle',0.45);
+    tone(t,F(chordTones[ch][arpIdx[i%8]]+12),STEPD*0.6,'square',0.06);
+    if(i%16===14) tone(t,F(chordTones[ch][2]+24),STEPD*1.4,'square',0.05);
+  }
+  function loop(){
+    while(nextT<ac.currentTime+0.15){
+      playStep(step,nextT);
+      nextT+=STEPD; step=(step+1)%TOTAL;
+    }
+  }
+  return {
+    start(){ ensure(); if(playing) return; playing=true; step=0; nextT=ac.currentTime+0.06; timer=setInterval(loop,50); },
+    stop(){ playing=false; if(timer){ clearInterval(timer); timer=null; } },
+    pause(){ if(ac&&ac.state==='running') ac.suspend(); },
+    unpause(){ if(ac&&ac.state==='suspended') ac.resume(); },
+    toggle(){ ensure(); const on=master.gain.value>0.01; master.gain.value=on?0:0.2; return !on; },
+    status(){ return { playing, state: ac?ac.state:'none', gain: master?master.gain.value:null }; }
+  };
+})();
+
+/* ================= 画布自适应（整屏内完整显示） ================= */
+function fitCanvas(){
+  const box=document.getElementById('canvasBox');
+  const bw=box.clientWidth-10, bh=box.clientHeight-10;
+  if(bw<=0||bh<=0) return;
+  const s=Math.max(0.15,Math.min(bw/W,bh/H));
+  cv.style.width=Math.floor(W*s)+'px';
+  cv.style.height=Math.floor(H*s)+'px';
+}
+window.addEventListener('resize',fitCanvas);
+
+/* ================= 启动 ================= */
+if(!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+    this.moveTo(x+r,y); this.arcTo(x+w,y,x+w,y+h,r); this.arcTo(x+w,y+h,x,y+h,r);
+    this.arcTo(x,y+h,x,y,r); this.arcTo(x,y,x+w,y,r); this.closePath();
+    return this;
+  };
+}
+G=newGame();
+updateHUD();
+running=true;
+requestAnimationFrame(tick);
+requestAnimationFrame(fitCanvas);
+fitCanvas();
+fillProvSel(document.getElementById('eProvSel'),true);
+fillProvSel(document.getElementById('mProvSel'),false);
+(function initResume(){
+  const s=readSave();
+  if(s){
+    document.getElementById('resumeBtn').style.display='block';
+    const si=document.getElementById('saveInfo');
+    si.style.display='block';
+    si.textContent='上次进度：第'+s.wave+'波 · 击杀'+s.kills+' · 得分'+(s.score||0)+' · 生命'+s.lives;
+    document.getElementById('startBtn').textContent='开始新局';
+  }
+})();
+showPanel('startBox');
+</script>
+</body>
+</html>
