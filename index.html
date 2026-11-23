@@ -202,7 +202,9 @@
       · 每10波全新兵种解锁 + 全部塔伤害+5%<br>
       · 升级外观逐级更华丽，Lv3 满级金装<br>
       · 敌人走到底部军营会扣生命，生命归零结束<br>
-      · 敌军增强：波次更密、血量成长更快、20波起首领成双<br>
+      · 高速杂兵/重甲/刺客沿谷道进攻，<b style="color:#f3ce6a">飞行怪直线扑营</b><br>
+      · 精英15波起登场（萨满会给友军回血，优先击杀）<br>
+      · 每10波出<b style="color:#ff9d7d">巨型Boss</b>（小怪放大2倍）；20波起成双<br>
       · <b style="color:#f3ce6a">每10波自动记录排名</b>（全国榜+省份榜）<br>
       · <b style="color:#f3ce6a">进度自动保存</b>：有事随时退出，回来点「继续上次进度」
     </div>
@@ -257,6 +259,8 @@ const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 const WAYPOINTS=[[4,0],[4,1],[7,1],[7,4],[1,4],[1,7],[4,7],[4,8]];
 const WPX=WAYPOINTS.map(p=>({x:p[0]*CELL+CELL/2, y:p[1]*CELL+CELL/2}));
 WPX.unshift({x:WPX[0].x, y:-24});  // 敌人从画布上方入场
+/* 地面路径总长（用于进度归一化，塔优先打最靠近军营的敌人） */
+const PATH_LEN=(()=>{let s=0;for(let i=1;i<WPX.length;i++)s+=Math.hypot(WPX[i].x-WPX[i-1].x,WPX[i].y-WPX[i-1].y);return s;})();
 
 /* 路格集合（不可建塔） */
 const pathCells=new Set();
@@ -288,12 +292,31 @@ const TOWERS={
 };
 const TOWER_KEYS=Object.keys(TOWERS);
 
-/* 敌人定义 */
+/* 敌人定义：按功能六类（高速杂兵/重甲慢速/飞行/刺客/精英/Boss同源放大2倍） */
 const ENEMIES={
-  grunt:{ name:'步兵', hp:44,  spd:52, bounty:10,  dmg:1, r:11, color:'#d0603a' },
-  runner:{name:'疾行', hp:30,  spd:95, bounty:12,  dmg:1, r:9,  color:'#c9a13a' },
-  tank:{  name:'装甲', hp:230, spd:30, bounty:32,  dmg:2, r:14, color:'#6b6fa0' },
-  boss:{  name:'首领', hp:1500,spd:24, bounty:220, dmg:6, r:18, color:'#a03a5c' },
+  /* —— 高速杂兵：血少跑得快 —— */
+  slime:{ name:'史莱姆', cat:'fast', hp:30, spd:70, bounty:8,  dmg:1, r:10, color:'#7ad96a' },
+  beetle:{ name:'小甲虫', cat:'fast', hp:38, spd:62, bounty:9,  dmg:1, r:10, color:'#b07848' },
+  bat:{   name:'小蝙蝠', cat:'fast', hp:24, spd:88, bounty:10, dmg:1, r:9,  color:'#8a6ab5' },
+  /* —— 重甲慢速：血厚走得慢，漏怪伤害高 —— */
+  crab:{   name:'寄居蟹',   cat:'armor', hp:220, spd:26, bounty:30, dmg:2, r:13, color:'#e08a3a' },
+  stone:{  name:'石头小精灵', cat:'armor', hp:300, spd:22, bounty:38, dmg:2, r:14, color:'#8a8a82' },
+  heavyBeetle:{ name:'厚壳甲虫', cat:'armor', hp:430, spd:18, bounty:50, dmg:2, r:15, color:'#6a4a2a' },
+  /* —— 飞行怪：不走谷道，直线扑营！ —— */
+  ghost:{  name:'幽灵',     cat:'fly', fly:true, hp:60,  spd:55, bounty:14, dmg:1, r:11, color:'#d8e8f0' },
+  flybug:{ name:'小飞虫',   cat:'fly', fly:true, hp:40,  spd:75, bounty:12, dmg:1, r:9,  color:'#c8d84a' },
+  drone:{  name:'三角无人机', cat:'fly', fly:true, hp:115, spd:50, bounty:22, dmg:1, r:11, color:'#6a9ac8' },
+  /* —— 刺客：极快，漏进营伤害翻倍 —— */
+  scorpion:{ name:'小蝎子', cat:'assassin', hp:55, spd:95,  bounty:18, dmg:2, r:10, color:'#d05a3a' },
+  snake:{    name:'小蛇',   cat:'assassin', hp:48, spd:105, bounty:20, dmg:2, r:9,  color:'#4a9a5a' },
+  /* —— 精英：15波起登场，小体型大威胁 —— */
+  crystal:{ name:'水晶怪',     cat:'elite', hp:550, spd:30, bounty:90,  dmg:3, r:16, color:'#5ad8d8' },
+  shaman:{  name:'萨满小地精', cat:'elite', hp:450, spd:34, bounty:100, dmg:2, r:15, color:'#a06ad8' },
+  /* —— Boss：小怪同源放大2倍（同造型、同画风，加大体型+光环） —— */
+  bossSlime:{   name:'巨型史莱姆',   cat:'boss', base:'slime',   hp:700,  spd:34, bounty:240, dmg:5, r:20, color:'#7ad96a' },
+  bossCrab:{    name:'巨型寄居蟹',   cat:'boss', base:'crab',    hp:1300, spd:13, bounty:320, dmg:6, r:26, color:'#e08a3a' },
+  bossGhost:{   name:'巨型幽灵',     cat:'boss', base:'ghost',   hp:950,  spd:26, bounty:360, dmg:5, r:22, color:'#d8e8f0', fly:true },
+  bossCrystal:{ name:'巨型水晶怪',   cat:'boss', base:'crystal', hp:2100, spd:14, bounty:500, dmg:6, r:32, color:'#5ad8d8' },
 };
 
 /* ================= 游戏状态 ================= */
@@ -308,19 +331,51 @@ function newGame(){
   };
 }
 
-/* 波次编成 */
+/* 波次编成：按功能分配的一套完整波次 */
 function buildWave(w){
   const list=[];
-  const n=8+Math.floor(w*2.6);
-  for(let i=0;i<n;i++){
-    let t='grunt';
-    if(w>=2 && i%3===1) t='runner';
-    if(w>=4 && i%5===4) t='tank';
-    if(w>=6 && i%4===3) t='runner';
-    if(w>=12 && i%7===6) t='tank';
-    list.push(t);
+  const n=Math.min(90,8+Math.floor(w*2.4));
+  const add=(t,k)=>{for(let i=0;i<k;i++)list.push(t);};
+  /* 高速杂兵：主力，占比随波次下降 */
+  const fastN=Math.max(3,Math.round(n*Math.max(0.75-0.012*w,0.32)));
+  add('slime',Math.max(1,Math.round(fastN*0.45)));
+  if(w>=2) add('beetle',Math.round(fastN*0.3));
+  if(w>=4) add('bat',Math.round(fastN*0.3));
+  /* 重甲慢速：3波起 */
+  if(w>=3){
+    const aN=Math.round(n*Math.min(0.10+0.02*(w-3),0.26));
+    add('crab',Math.max(1,Math.round(aN*0.5)));
+    if(w>=8) add('stone',Math.round(aN*0.35));
+    if(w>=14) add('heavyBeetle',Math.round(aN*0.3));
   }
-  if(w%10===0){ list.unshift('boss'); if(w>=20) list.unshift('boss'); }
+  /* 飞行怪：5波起，直线扑营（不走谷道！） */
+  if(w>=5){
+    const fN=Math.round(n*Math.min(0.10+0.012*(w-5),0.22));
+    add('ghost',Math.max(1,Math.round(fN*0.4)));
+    if(w>=6) add('flybug',Math.round(fN*0.35));
+    if(w>=11) add('drone',Math.round(fN*0.3));
+  }
+  /* 刺客：7波起，快且漏怪伤害高 */
+  if(w>=7){
+    const sN=Math.round(n*Math.min(0.08+0.01*(w-7),0.18));
+    add('scorpion',Math.max(1,Math.round(sN*0.5)));
+    if(w>=9) add('snake',Math.round(sN*0.5));
+  }
+  /* 精英：15波起 */
+  if(w>=15){
+    const eN=Math.round(n*Math.min(0.03+0.006*(w-15),0.10));
+    add('crystal',Math.max(1,Math.round(eN*0.55)));
+    if(w>=17) add('shaman',Math.round(eN*0.45));
+  }
+  while(list.length<n) list.push('slime');
+  for(let i=list.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[list[i],list[j]]=[list[j],list[i]];}
+  /* Boss波：每10波小怪同源放大2倍；20波起成双、40波起三连 */
+  if(w%10===0){
+    const bosses=['bossSlime','bossCrab','bossGhost','bossCrystal'];
+    const bCount=1+Math.min(2,Math.floor(w/20));
+    const start=Math.floor(w/10)-1;
+    for(let i=0;i<bCount;i++) list.unshift(bosses[(start+i)%4]);
+  }
   return list;
 }
 
@@ -332,22 +387,28 @@ function calcScore(g){
 function spawnEnemy(type,w){
   const d=ENEMIES[type];
   const hpMul=Math.pow(1.22,w-1), spdMul=1+Math.min(.9,w*0.015);
-  G.enemies.push({
-    type, seg:0, segT:0, pos:{x:WPX[0].x, y:WPX[0].y}, hp:Math.round(d.hp*hpMul),
-    hpMax:Math.round(d.hp*hpMul), spd:d.spd*spdMul, slowUntil:0, slowF:1,
-    bounty:d.bounty, dmg:d.dmg, r:d.r, color:d.color, dead:false,
-    prog:-1,
-  });
-}
-
-function enemyProgress(e){
-  return e.seg*10000+e.segT;
+  const hp=Math.round(d.hp*hpMul);
+  const base={type,hp,hpMax:hp,spd:d.spd*spdMul,slowUntil:0,slowF:1,
+    bounty:d.bounty,dmg:d.dmg,r:d.r,color:d.color,dead:false,
+    seed:Math.random()*10,poisonUntil:0,poisonDps:0,face:Math.PI/2};
+  if(d.fly){
+    /* 飞行怪：随机偏移的直线航线（入口上空 → 军营） */
+    G.enemies.push({...base,flying:true,flyT:0,
+      x0:WPX[1].x+(Math.random()*150-75),
+      x1:WPX[WPX.length-1].x+(Math.random()*60-30),
+      bob:Math.random()*6.28,
+      pos:{x:WPX[1].x,y:-24}});
+  }else{
+    G.enemies.push({...base,seg:0,segT:0,traveled:0,
+      pos:{x:WPX[0].x,y:WPX[0].y}});
+  }
 }
 
 function moveEnemy(e,dt){
   const now=performance.now()/1000;
   const f=(now<e.slowUntil)?e.slowF:1;
   let dist=e.spd*f*dt;
+  e.traveled=(e.traveled||0)+dist;
   while(dist>0&&e.seg<WPX.length-1){
     const a=WPX[e.seg], b=WPX[e.seg+1];
     const segLen=Math.hypot(b.x-a.x,b.y-a.y);
@@ -362,12 +423,41 @@ function moveEnemy(e,dt){
     const a=WPX[e.seg], b=WPX[e.seg+1];
     const segLen=Math.hypot(b.x-a.x,b.y-a.y);
     const t=e.segT/segLen;
-    e.pos.x=a.x+(b.x-a.x)*t; e.pos.y=a.y+(b.y-a.y)*t;
-  }
-  e.prog=e.seg*10000+e.segT;
-  // 到达终点军营：漏怪扣生命
-  if(e.seg>=WPX.length-1){
+    const nx=a.x+(b.x-a.x)*t, ny=a.y+(b.y-a.y)*t;
+    if(e.lastPos){
+      const dx=nx-e.lastPos.x, dy=ny-e.lastPos.y;
+      if(dx*dx+dy*dy>0.01) e.face=Math.atan2(dy,dx);
+    }
+    e.lastPos={x:nx,y:ny};
+    e.pos.x=nx; e.pos.y=ny;
+    e.prog=(e.traveled/PATH_LEN)*10000;
+  }else{
+    /* 到达终点军营：漏怪扣生命 */
     e.pos.x=WPX[WPX.length-1].x; e.pos.y=WPX[WPX.length-1].y;
+    e.dead=true; e.leaked=true;
+    G.lives-=e.dmg;
+    addFloat(WPX[WPX.length-1].x,WPX[WPX.length-1].y-14,'-'+e.dmg,'#ff7d7d');
+    if(G.lives<=0){ G.lives=0; endGame(); }
+  }
+}
+
+/* 飞行怪：直线扑营（带正弦摆动） */
+function moveFly(e,dt){
+  const now=performance.now()/1000;
+  const f=(now<e.slowUntil)?e.slowF:1;
+  const total=H+48;
+  e.flyT=(e.flyT||0)+e.spd*f*dt/total;
+  const t=Math.min(1,e.flyT);
+  const nx=e.x0+(e.x1-e.x0)*t+Math.sin(e.bob+t*7)*9;
+  const ny=-24+t*total;
+  if(e.lastPos){
+    const dx=nx-e.lastPos.x, dy=ny-e.lastPos.y;
+    if(dx*dx+dy*dy>0.01) e.face=Math.atan2(dy,dx);
+  }
+  e.lastPos={x:nx,y:ny};
+  e.pos.x=nx; e.pos.y=ny;
+  e.prog=t*10000;
+  if(e.flyT>=1){
     e.dead=true; e.leaked=true;
     G.lives-=e.dmg;
     addFloat(WPX[WPX.length-1].x,WPX[WPX.length-1].y-14,'-'+e.dmg,'#ff7d7d');
@@ -557,13 +647,25 @@ function update(dt,now){
     }
   }
 
-  /* 敌人移动 */
+  /* 敌人移动（地面走谷道 / 飞行走直线）+ 萨满治疗光环 + 毒伤 */
   for(const e of G.enemies){
-    if(!e.dead){
-      moveEnemy(e,dt);
-      /* 毒素持续伤害 */
-      if(now<e.poisonUntil&&e.poisonDps>0){
-        hurt(e,e.poisonDps*dt,now);
+    if(e.dead) continue;
+    if(e.flying) moveFly(e,dt); else moveEnemy(e,dt);
+    if(e.dead) continue;
+    if(now<e.poisonUntil&&e.poisonDps>0){
+      hurt(e,e.poisonDps*dt,now);
+    }
+    if(e.type==='shaman'){
+      e.healT=(e.healT||0)+dt;
+      if(e.healT>=3){
+        e.healT=0;
+        G.fx.push({x:e.pos.x,y:e.pos.y,r:64,t:0,life:.5,color:'#a0ff9a'});
+        for(const o of G.enemies){
+          if(o===e||o.dead) continue;
+          if(Math.hypot(o.pos.x-e.pos.x,o.pos.y-e.pos.y)<=64){
+            o.hp=Math.min(o.hpMax,o.hp+o.hpMax*0.06);
+          }
+        }
       }
     }
   }
@@ -590,6 +692,9 @@ function startWave(){
   G.queue=buildWave(G.wave);
   G.spawnIdx=0; G.spawnGap=0.5; G.phase='spawning';
   addFloat(W/2,60,'第 '+G.wave+' 波来袭！','#ffd97a');
+  const cnt={};
+  for(const t of G.queue){const nm=ENEMIES[t].name;cnt[nm]=(cnt[nm]||0)+1;}
+  showToast('第'+G.wave+'波：'+Object.keys(cnt).map(k=>k+'×'+cnt[k]).join(' '),3000);
   updateHUD();
 }
 
@@ -648,7 +753,11 @@ function draw(now){
   if(G) for(const t of G.towers) drawTower(t,now);
 
   /* 敌人 */
-  if(G) for(const e of G.enemies) drawEnemy(e,now);
+  /* 敌人：地面先画、飞行后画（空中在上层） */
+  if(G){
+    for(const e of G.enemies) if(!e.flying) drawEnemy(e,now);
+    for(const e of G.enemies) if(e.flying) drawEnemy(e,now);
+  }
 
   /* 子弹 */
   if(G) for(const b of G.bullets){
@@ -1061,33 +1170,297 @@ function drawFrostTower(t,now,lvl){
   ctx.restore();
 }
 
+/* 怪物外观绘制器：与小怪同源的画风，Boss 复用同款（r 翻倍即放大2倍） */
+const MONSTER_PAINTERS={
+  slime(x,y,r,now,e){
+    const sq=1+Math.sin(now*6+e.seed)*0.12;
+    ctx.fillStyle=e.color;
+    ctx.beginPath();
+    ctx.ellipse(x,y+r*0.12,r*sq,r*0.9/sq,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.30)';
+    ctx.beginPath(); ctx.ellipse(x-r*0.35,y-r*0.3,r*0.22,r*0.12,-0.6,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#1a2a1a';
+    ctx.beginPath(); ctx.arc(x-r*0.26,y-r*0.05,r*0.10,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+r*0.26,y-r*0.05,r*0.10,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.8)';
+    ctx.beginPath(); ctx.arc(x-r*0.23,y-r*0.08,r*0.035,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+r*0.29,y-r*0.08,r*0.035,0,Math.PI*2); ctx.fill();
+  },
+  beetle(x,y,r,now,e){
+    const fa=e.face===undefined?Math.PI/2:e.face;
+    ctx.save(); ctx.translate(x,y); ctx.rotate(fa);
+    ctx.fillStyle=e.color;
+    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,.30)'; ctx.lineWidth=Math.max(1,r*0.09);
+    ctx.beginPath(); ctx.moveTo(0,-r*0.85); ctx.lineTo(0,r*0.85); ctx.stroke();
+    ctx.fillStyle='#7a4e2a';
+    ctx.beginPath(); ctx.arc(r*0.82,0,r*0.3,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#7a4e2a'; ctx.lineWidth=Math.max(1,r*0.07);
+    ctx.beginPath(); ctx.moveTo(r*0.95,-r*0.16); ctx.lineTo(r*1.4,-r*0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(r*0.95,r*0.16); ctx.lineTo(r*1.4,r*0.5); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,.22)';
+    ctx.beginPath(); ctx.arc(-r*0.32,-r*0.3,r*0.18,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  },
+  bat(x,y,r,now,e){
+    const flap=Math.sin(now*13+e.seed*3)*0.55;
+    ctx.fillStyle=e.color;
+    for(const s of [-1,1]){
+      ctx.beginPath();
+      ctx.moveTo(x-r*0.15*s,y-r*0.05);
+      ctx.quadraticCurveTo(x-r*0.9*s,y-r*(0.9+flap),x-r*1.5*s,y-r*(0.35+flap*0.5));
+      ctx.quadraticCurveTo(x-r*0.7*s,y+r*0.12,x-r*0.15*s,y+r*0.18);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle='#5a4a80';
+    ctx.beginPath(); ctx.arc(x,y,r*0.55,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x-r*0.32,y-r*0.38); ctx.lineTo(x-r*0.22,y-r*0.72); ctx.lineTo(x-r*0.08,y-r*0.4); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x+r*0.32,y-r*0.38); ctx.lineTo(x+r*0.22,y-r*0.72); ctx.lineTo(x+r*0.08,y-r*0.4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#ff6a6a';
+    ctx.beginPath(); ctx.arc(x-r*0.16,y-r*0.08,r*0.09,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+r*0.16,y-r*0.08,r*0.09,0,Math.PI*2); ctx.fill();
+  },
+  crab(x,y,r,now,e){
+    const fa=e.face===undefined?Math.PI/2:e.face;
+    const fx=Math.cos(fa), fy=Math.sin(fa);
+    ctx.fillStyle=e.color;
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(255,235,210,.45)'; ctx.lineWidth=Math.max(1,r*0.09);
+    ctx.beginPath(); ctx.arc(x-r*0.08,y-r*0.08,r*0.55,0.4,4.8); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x-r*0.08,y-r*0.08,r*0.28,0.8,4.4); ctx.stroke();
+    ctx.strokeStyle=e.color; ctx.lineWidth=Math.max(1,r*0.08);
+    for(const s of [-1,1]) for(let i=0;i<3;i++){
+      const lx=x-fx*r*(0.15+i*0.28), ly=y-fy*r*(0.15+i*0.28);
+      ctx.beginPath();
+      ctx.moveTo(lx-fy*s*r*0.65,ly+fx*s*r*0.65);
+      ctx.lineTo(lx-fy*s*r*(1.1+(i%2)*0.15),ly+fx*s*r*(1.1+(i%2)*0.15));
+      ctx.stroke();
+    }
+    ctx.fillStyle='#c86a2a';
+    for(const s of [-1,1]){
+      ctx.beginPath(); ctx.arc(x+fx*r*0.85-fy*s*r*0.55,y+fy*r*0.85+fx*s*r*0.55,r*0.26,0,Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle='#fff';
+    for(const s of [-1,1]){
+      ctx.beginPath(); ctx.arc(x+fx*r*0.5-fy*s*r*0.3,y+fy*r*0.5+fx*s*r*0.3,r*0.12,0,Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle='#3a2a1a';
+    for(const s of [-1,1]){
+      ctx.beginPath(); ctx.arc(x+fx*r*0.55-fy*s*r*0.3,y+fy*r*0.55+fx*s*r*0.3,r*0.055,0,Math.PI*2); ctx.fill();
+    }
+  },
+  stone(x,y,r,now,e){
+    ctx.fillStyle=e.color;
+    ctx.beginPath();
+    for(let i=0;i<7;i++){
+      const a=i/7*Math.PI*2;
+      const rr=r*(0.82+((Math.sin(i*3.7+e.seed*5)+1)/2)*0.3);
+      const px=x+Math.cos(a)*rr, py=y+Math.sin(a)*rr;
+      i?ctx.lineTo(px,py):ctx.moveTo(px,py);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#6a9a4a';
+    ctx.beginPath(); ctx.arc(x,y-r*0.5,r*0.42,Math.PI,0); ctx.fill();
+    ctx.fillStyle='#3a4a3a';
+    ctx.beginPath(); ctx.arc(x-r*0.22,y+r*0.12,r*0.09,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+r*0.22,y+r*0.12,r*0.09,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#3a4a3a'; ctx.lineWidth=Math.max(1,r*0.06);
+    ctx.beginPath(); ctx.moveTo(x-r*0.26,y+r*0.38); ctx.lineTo(x-r*0.08,y+r*0.38); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x+r*0.08,y+r*0.38); ctx.lineTo(x+r*0.26,y+r*0.38); ctx.stroke();
+  },
+  heavyBeetle(x,y,r,now,e){
+    const fa=e.face===undefined?Math.PI/2:e.face;
+    ctx.save(); ctx.translate(x,y); ctx.rotate(fa);
+    ctx.fillStyle=e.color;
+    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.lineWidth=Math.max(1,r*0.08);
+    ctx.beginPath(); ctx.moveTo(-r*0.25,-r*0.78); ctx.lineTo(-r*0.25,r*0.78); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(r*0.25,-r*0.66); ctx.lineTo(r*0.25,r*0.66); ctx.stroke();
+    ctx.fillStyle='#3a2a1a';
+    ctx.beginPath(); ctx.moveTo(r*0.85,-r*0.16); ctx.lineTo(r*1.75,0); ctx.lineTo(r*0.85,r*0.16); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#5a3a1e';
+    ctx.beginPath(); ctx.arc(-r*0.75,0,r*0.3,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  },
+  ghost(x,y,r,now,e){
+    ctx.globalAlpha=0.88;
+    const by=y+Math.sin(now*3+e.seed)*r*0.18;
+    ctx.fillStyle=e.color;
+    ctx.beginPath();
+    ctx.arc(x,by-r*0.2,r*0.8,Math.PI,0);
+    ctx.lineTo(x+r*0.8,by+r*0.45);
+    for(let i=0;i<4;i++){
+      const wx=x+r*0.8-(i+1)*r*0.4;
+      ctx.quadraticCurveTo(wx+r*0.2,by+r*0.45+((i%2)?-r*0.3:r*0.02),wx,by+r*0.45);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#4a5a6a';
+    ctx.beginPath(); ctx.ellipse(x-r*0.28,by-r*0.3,r*0.1,r*0.15,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x+r*0.28,by-r*0.3,r*0.1,r*0.15,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x,by+r*0.05,r*0.12,r*0.08,0,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+  },
+  flybug(x,y,r,now,e){
+    const flap=Math.abs(Math.sin(now*22+e.seed*5));
+    ctx.fillStyle='rgba(255,255,255,.5)';
+    for(const s of [-1,1]){
+      ctx.beginPath();
+      ctx.ellipse(x+s*r*0.8,y-r*0.35,r*0.7,r*0.32*(0.4+flap*0.8),s*0.5,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.fillStyle=e.color;
+    ctx.beginPath(); ctx.ellipse(x,y,r*0.5,r*0.68,0,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,.32)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x-r*0.45,y-r*0.12); ctx.lineTo(x+r*0.45,y-r*0.12); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x-r*0.4,y+r*0.22); ctx.lineTo(x+r*0.4,y+r*0.22); ctx.stroke();
+    ctx.fillStyle='#ff6a6a';
+    ctx.beginPath(); ctx.arc(x-r*0.18,y-r*0.45,r*0.09,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+r*0.18,y-r*0.45,r*0.09,0,Math.PI*2); ctx.fill();
+  },
+  drone(x,y,r,now,e){
+    const fa=e.face===undefined?Math.PI/2:e.face;
+    ctx.save(); ctx.translate(x,y); ctx.rotate(fa);
+    ctx.strokeStyle='#9ab0c0'; ctx.lineWidth=Math.max(1,r*0.12);
+    ctx.beginPath(); ctx.moveTo(-r*0.15,-r*0.55); ctx.lineTo(-r*0.15,r*0.55); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-r*0.15,0); ctx.lineTo(r*0.55,0); ctx.stroke();
+    const rot=Math.sin(now*26+e.seed);
+    ctx.strokeStyle='#d8e4ec'; ctx.lineWidth=Math.max(1,r*0.14);
+    ctx.beginPath(); ctx.moveTo(-r*0.15-rot*r*0.85,-r*0.55); ctx.lineTo(-r*0.15+rot*r*0.85,-r*0.55); ctx.stroke();
+    ctx.fillStyle=e.color;
+    ctx.beginPath(); ctx.moveTo(r*0.95,0); ctx.lineTo(-r*0.5,-r*0.62); ctx.lineTo(-r*0.5,r*0.62); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle=Math.sin(now*9)>0?'#ff5a5a':'#7a3a3a';
+    ctx.beginPath(); ctx.arc(r*0.25,0,r*0.12,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  },
+  scorpion(x,y,r,now,e){
+    const fa=e.face===undefined?Math.PI/2:e.face;
+    ctx.save(); ctx.translate(x,y); ctx.rotate(fa);
+    const wag=Math.sin(now*7+e.seed)*0.3;
+    ctx.strokeStyle=e.color; ctx.lineWidth=Math.max(1.5,r*0.16); ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(-r*0.55,0);
+    ctx.quadraticCurveTo(-r*1.25,-r*0.25,-r*1.05,-r*0.9+wag*r*0.3);
+    ctx.stroke();
+    ctx.fillStyle='#e8d84a';
+    ctx.beginPath();
+    ctx.moveTo(-r*1.0,-r*0.82+wag*r*0.3);
+    ctx.lineTo(-r*1.28,-r*1.12+wag*r*0.3);
+    ctx.lineTo(-r*0.86,-r*1.02+wag*r*0.3);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle=e.color;
+    ctx.beginPath(); ctx.ellipse(r*0.1,0,r*0.5,r*0.36,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-r*0.4,0,r*0.3,r*0.26,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#b0482a';
+    ctx.beginPath(); ctx.arc(r*0.75,-r*0.3,r*0.2,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(r*0.75,r*0.3,r*0.2,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  },
+  snake(x,y,r,now,e){
+    const fa=e.face===undefined?Math.PI/2:e.face;
+    const ca=Math.cos(fa), sa=Math.sin(fa);
+    ctx.fillStyle=e.color;
+    for(let i=5;i>=1;i--){
+      const along=-i*r*0.5;
+      const side=Math.sin(now*9+e.seed-i*1.05)*r*0.4*(1-i*0.13);
+      const sx=x+ca*along-sa*side, sy=y+sa*along+ca*side;
+      ctx.beginPath(); ctx.arc(sx,sy,r*(0.5-i*0.055),0,Math.PI*2); ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(x,y,r*0.62,0,Math.PI*2); ctx.fill();
+    if(Math.sin(now*6+e.seed)>0.4){
+      ctx.strokeStyle='#ff5a5a'; ctx.lineWidth=Math.max(1,r*0.09);
+      ctx.beginPath(); ctx.moveTo(x+ca*r*0.6,y+sa*r*0.6); ctx.lineTo(x+ca*r*1.15,y+sa*r*1.15); ctx.stroke();
+    }
+    ctx.fillStyle='#ffd94a';
+    for(const s of [-1,1]){
+      ctx.beginPath(); ctx.arc(x-sa*s*r*0.26,y+ca*s*r*0.26,r*0.11,0,Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle='#1a1a1a';
+    for(const s of [-1,1]){
+      ctx.beginPath(); ctx.arc(x-sa*s*r*0.26,y+ca*s*r*0.26,r*0.05,0,Math.PI*2); ctx.fill();
+    }
+  },
+  crystal(x,y,r,now,e){
+    const shards=[[-r*0.55,r*0.12,r*0.5],[r*0.5,r*0.18,r*0.45],[0,-r*0.05,r*0.85]];
+    for(const [ox,oy,sr] of shards){
+      ctx.fillStyle=e.color;
+      ctx.beginPath();
+      ctx.moveTo(x+ox,y+oy-sr*1.5);
+      ctx.lineTo(x+ox+sr*0.62,y+oy);
+      ctx.lineTo(x+ox,y+oy+sr*0.75);
+      ctx.lineTo(x+ox-sr*0.62,y+oy);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.lineWidth=1; ctx.stroke();
+    }
+    const tw=(Math.sin(now*4+e.seed)+1)/2;
+    ctx.fillStyle='rgba(255,255,255,'+(0.4+tw*0.6).toFixed(2)+')';
+    const sx=x+r*0.62, sy=y-r*0.86, sr2=r*0.16+tw*r*0.08;
+    ctx.beginPath();
+    ctx.moveTo(sx,sy-sr2); ctx.lineTo(sx+sr2*0.3,sy-sr2*0.3); ctx.lineTo(sx+sr2,sy);
+    ctx.lineTo(sx+sr2*0.3,sy+sr2*0.3); ctx.lineTo(sx,sy+sr2); ctx.lineTo(sx-sr2*0.3,sy+sr2*0.3);
+    ctx.lineTo(sx-sr2,sy); ctx.lineTo(sx-sr2*0.3,sy-sr2*0.3);
+    ctx.closePath(); ctx.fill();
+  },
+  shaman(x,y,r,now,e){
+    const pu=0.8+Math.sin(now*5+e.seed)*0.25;
+    ctx.strokeStyle='#8a6a3a'; ctx.lineWidth=Math.max(1.5,r*0.1); ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(x+r*0.75,y+r*0.55); ctx.lineTo(x+r*1.05,y-r*0.8); ctx.stroke();
+    ctx.fillStyle='rgba(138,255,200,.25)';
+    ctx.beginPath(); ctx.arc(x+r*1.05,y-r*0.9,r*0.36*pu,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#8affc8';
+    ctx.beginPath(); ctx.arc(x+r*1.05,y-r*0.9,r*0.2*pu,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=e.color;
+    ctx.beginPath();
+    ctx.moveTo(x,y-r*0.45);
+    ctx.lineTo(x+r*0.8,y+r*0.72);
+    ctx.quadraticCurveTo(x,y+r*0.95,x-r*0.8,y+r*0.72);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#7a4ab8';
+    ctx.beginPath(); ctx.arc(x,y-r*0.45,r*0.44,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#ffe98a';
+    ctx.beginPath(); ctx.arc(x-r*0.14,y-r*0.45,r*0.07,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+r*0.14,y-r*0.45,r*0.07,0,Math.PI*2); ctx.fill();
+  },
+};
+
 function drawEnemy(e,now){
-  const slowed=now<e.slowUntil;
-  const poisoned=now<e.poisonUntil;
-  ctx.fillStyle=e.color;
-  ctx.beginPath(); ctx.arc(e.pos.x,e.pos.y,e.r,0,Math.PI*2); ctx.fill();
-  if(slowed){
-    ctx.strokeStyle='#9fd0ff'; ctx.lineWidth=2.5;
-    ctx.beginPath(); ctx.arc(e.pos.x,e.pos.y,e.r+3,0,Math.PI*2); ctx.stroke();
+  const d=ENEMIES[e.type]||ENEMIES.slime;
+  const x=e.pos.x, y=e.pos.y, r=e.r;
+  /* 飞行怪：地面投影（空中感） */
+  if(e.flying){
+    ctx.fillStyle='rgba(0,0,0,.20)';
+    ctx.beginPath(); ctx.ellipse(x,y+r*1.5,r*0.75,r*0.28,0,0,Math.PI*2); ctx.fill();
   }
-  if(poisoned){
+  /* Boss：红橙脉动光环（造型与小怪同源，仅放大2倍） */
+  if(d.cat==='boss'){
+    const au=0.4+0.18*Math.sin(now*3+e.seed);
+    ctx.strokeStyle='rgba(255,120,60,'+au.toFixed(2)+')';
+    ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(x,y,r*1.32+Math.sin(now*3)*2,0,Math.PI*2); ctx.stroke();
+  }
+  const pk=d.base||e.type;
+  (MONSTER_PAINTERS[pk]||MONSTER_PAINTERS.slime)(x,y,r,now,e);
+  /* 冰冻减速环 */
+  if(now<e.slowUntil){
+    ctx.strokeStyle='#9fd0ff'; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.arc(x,y,r+3,0,Math.PI*2); ctx.stroke();
+  }
+  /* 中毒粒子 */
+  if(now<e.poisonUntil){
     ctx.fillStyle='#8cf06a';
     for(let i=0;i<3;i++){
       const a=now*3+i*2.1;
       ctx.beginPath();
-      ctx.arc(e.pos.x+Math.cos(a)*(e.r+2.5),e.pos.y+Math.sin(a)*(e.r+2.5),1.7,0,Math.PI*2);
-      ctx.fill();
+      ctx.arc(x+Math.cos(a)*(r+2.5),y+Math.sin(a)*(r+2.5),1.7,0,Math.PI*2); ctx.fill();
     }
   }
-  if(e.type==='tank'||e.type==='boss'){
-    ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.lineWidth=3;
-    ctx.beginPath(); ctx.arc(e.pos.x,e.pos.y,e.r-4,0,Math.PI*2); ctx.stroke();
+  /* 血条（满血不显示，减少成群时的重叠杂乱） */
+  const hp=Math.max(0,e.hp/e.hpMax);
+  if(hp<0.999){
+    const w=Math.max(22,r*2.2), h=4;
+    ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(x-w/2,y-r-9,w,h);
+    ctx.fillStyle=hp>0.5?'#6fce6f':hp>0.25?'#e0c04a':'#e06a4a';
+    ctx.fillRect(x-w/2,y-r-9,w*hp,h);
   }
-  /* 血条 */
-  const w=e.r*2.2, h=4, hp=Math.max(0,e.hp/e.hpMax);
-  ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(e.pos.x-w/2,e.pos.y-e.r-9,w,h);
-  ctx.fillStyle=hp>0.5?'#6fce6f':hp>0.25?'#e0c04a':'#e06a4a';
-  ctx.fillRect(e.pos.x-w/2,e.pos.y-e.r-9,w*hp,h);
 }
 
 /* ================= HUD 与交互 ================= */
@@ -1420,9 +1793,13 @@ function saveGame(){
   try{
     const s={
       gold:G.gold, lives:G.lives, wave:G.wave, kills:G.kills, score:calcScore(G),
-      enemies:G.enemies.map(e=>({type:e.type,seg:e.seg,segT:e.segT,
-        pos:{x:e.pos.x,y:e.pos.y},hp:e.hp,hpMax:e.hpMax,spd:e.spd,slowF:e.slowF,
-        bounty:e.bounty,dmg:e.dmg,r:e.r,color:e.color})),
+      enemies:G.enemies.map(e=>{
+        const o={type:e.type,seg:e.seg,segT:e.segT,
+          pos:{x:e.pos.x,y:e.pos.y},hp:e.hp,hpMax:e.hpMax,spd:e.spd,slowF:e.slowF,
+          bounty:e.bounty,dmg:e.dmg,r:e.r,color:e.color,seed:e.seed,face:e.face,traveled:e.traveled};
+        if(e.flying){o.flying=true;o.x0=e.x0;o.x1=e.x1;o.bob=e.bob;o.flyT=e.flyT;}
+        return o;
+      }),
       towers:G.towers.map(t=>({type:t.type,c:t.c,r:t.r,x:t.x,y:t.y,lvl:t.lvl,ang:t.ang})),
       phase:G.phase, countdown:Math.max(0.5,G.countdown),
       queue:G.queue, spawnGap:G.spawnGap, spawnIdx:G.spawnIdx,
@@ -1445,7 +1822,18 @@ function restoreGame(){
   if(!s) return;
   G=newGame();
   G.gold=s.gold||150; G.lives=s.lives; G.wave=s.wave; G.kills=s.kills||0;
-  G.enemies=(s.enemies||[]).map(e=>({...e,slowUntil:0,slowF:e.slowF||1,dead:false}));
+  const TYPE_FIX={grunt:'slime',runner:'bat',tank:'crab',boss:'bossSlime'};
+  G.enemies=(s.enemies||[])
+    .map(e=>{const t=TYPE_FIX[e.type]||e.type;return {...e,type:ENEMIES[t]?t:'slime'};})
+    .map(e=>{
+      const o={...e,slowUntil:0,slowF:e.slowF||1,dead:false,poisonUntil:0,poisonDps:0};
+      if(o.flying&&o.x0===undefined){
+        o.x0=o.pos.x; o.x1=WPX[WPX.length-1].x;
+        o.bob=Math.random()*6.28;
+        o.flyT=Math.max(0,Math.min(1,(o.pos.y+24)/(H+48)));
+      }
+      return o;
+    });
   G.towers=(s.towers||[]).map(t=>({...t,lastFire:0}));
   G.queue=s.queue||[]; G.spawnIdx=s.spawnIdx||0; G.spawnGap=s.spawnGap||0.5;
   G.phase=s.phase||'idle'; G.countdown=s.countdown||3;
