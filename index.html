@@ -46,6 +46,7 @@
   #pauseBtn { right:8px; }
   #musicBtn { right:54px; }
   #musicBtn.off { color:#7a907a; text-decoration:line-through; }
+  #boardBtn3 { right:100px; font-size:13px; }
 
   /* 底部操作区 */
   #bottom {
@@ -84,6 +85,7 @@
   .tcard:active { filter:brightness(1.25); }
   .wide { width:100%; border:none; border-radius:12px; padding:13px; font-size:15px; font-weight:700; }
   .btnUp { background:linear-gradient(#ffd97a,#e0a83c); color:#221600; }
+  .btnUp:disabled { opacity:.55; filter:grayscale(.4); }
   .btnSell { background:#3a2a2a; color:#e8b0a0; margin-top:8px; }
   .tinfo { font-size:12px; color:#a8c0a8; margin-bottom:10px; line-height:1.7; }
 
@@ -158,6 +160,7 @@
 
   <div id="canvasBox">
     <canvas id="cv" width="432" height="432"></canvas>
+    <button id="boardBtn3" class="ctlBtn" title="查看排行榜（游戏中自动暂停）">榜</button>
     <button id="musicBtn" class="ctlBtn" title="音乐开关">♪</button>
     <button id="pauseBtn" class="ctlBtn">Ⅱ</button>
   </div>
@@ -201,6 +204,8 @@
       · 🔒第10波 雷塔 · 第20波 毒塔 · 第30波 激光塔<br>
       · 每10波全新兵种解锁 + 全部塔伤害+5%<br>
       · 升级外观逐级更华丽，Lv3 满级金装<br>
+      · <b style="color:#f3ce6a">第10波后塔可升至Lv4、第20波后Lv5</b>（更强伤害）<br>
+      · 右上角「榜」按钮随时查看排行榜（自动暂停）<br>
       · 敌人走到底部军营会扣生命，生命归零结束<br>
       · 高速杂兵/重甲/刺客沿谷道进攻，<b style="color:#f3ce6a">飞行怪直线扑营</b><br>
       · 精英15波起登场（萨满会给友军回血，优先击杀）<br>
@@ -272,25 +277,33 @@ for(let i=0;i<WAYPOINTS.length-1;i++){
   while(c!==c2||r!==r2){ c+=dc; r+=dr; pathCells.add(c+','+r); }
 }
 
-/* 塔定义：3级可升；unlockWave=解锁波次（0=开场可用） */
+/* 塔定义：5级可升（Lv4/Lv5 分别在第10/20波后解锁，后期解锁的塔相应顺延）；unlockWave=解锁波次（0=开场可用） */
 const TOWERS={
-  arrow:{ name:'箭塔', desc:'速射·单体', color:'#4caf7d', cost:60,  up:[50,90], unlock:0,
-    lv:[{dmg:14,rate:1.4,range:96},{dmg:24,rate:1.6,range:104},{dmg:40,rate:1.9,range:112}] },
-  cannon:{ name:'炮塔', desc:'溅射·群伤', color:'#d0842f', cost:120, up:[100,180], unlock:0,
-    lv:[{dmg:34,rate:0.55,range:128,blast:54},{dmg:58,rate:0.6,range:136,blast:58},{dmg:95,rate:0.66,range:144,blast:64}] },
-  frost:{ name:'冰塔', desc:'减速·控场', color:'#4a9fe0', cost:80,  up:[60,110], unlock:0,
-    lv:[{dmg:8,rate:1.1,range:88,slow:.55,st:1.6},{dmg:13,rate:1.2,range:96,slow:.42,st:2.0},{dmg:20,rate:1.3,range:104,slow:.30,st:2.4}] },
-  lightning:{ name:'雷塔', desc:'闪电·链击', color:'#f0e050', cost:160, up:[140,240], unlock:10,
+  arrow:{ name:'箭塔', desc:'速射·单体', color:'#4caf7d', cost:60,  up:[50,90,180,320], unlock:0,
+    lv:[{dmg:14,rate:1.4,range:96},{dmg:24,rate:1.6,range:104},{dmg:40,rate:1.9,range:112},
+        {dmg:80,rate:2.2,range:120},{dmg:160,rate:2.5,range:128}] },
+  cannon:{ name:'炮塔', desc:'溅射·群伤', color:'#d0842f', cost:120, up:[100,180,340,600], unlock:0,
+    lv:[{dmg:34,rate:0.55,range:128,blast:54},{dmg:58,rate:0.6,range:136,blast:58},{dmg:95,rate:0.66,range:144,blast:64},
+        {dmg:190,rate:0.72,range:152,blast:70},{dmg:380,rate:0.8,range:160,blast:76}] },
+  frost:{ name:'冰塔', desc:'减速·控场', color:'#4a9fe0', cost:80,  up:[60,110,200,360], unlock:0,
+    lv:[{dmg:8,rate:1.1,range:88,slow:.55,st:1.6},{dmg:13,rate:1.2,range:96,slow:.42,st:2.0},{dmg:20,rate:1.3,range:104,slow:.30,st:2.4},
+        {dmg:40,rate:1.45,range:112,slow:.24,st:2.8},{dmg:80,rate:1.6,range:120,slow:.18,st:3.2}] },
+  lightning:{ name:'雷塔', desc:'闪电·链击', color:'#f0e050', cost:160, up:[140,240,420,700], unlock:10,
     descFull:'闪电连锁跳跃多个敌人',
-    lv:[{dmg:30,rate:0.8,range:104,chains:2},{dmg:48,rate:0.9,range:112,chains:3},{dmg:78,rate:1.0,range:120,chains:4}] },
-  poison:{ name:'毒塔', desc:'剧毒·持续', color:'#6adf4a', cost:220, up:[180,320], unlock:20,
+    lv:[{dmg:45,rate:0.85,range:104,chains:3},{dmg:72,rate:0.95,range:112,chains:4},{dmg:115,rate:1.05,range:120,chains:5},
+        {dmg:185,rate:1.15,range:128,chains:6},{dmg:300,rate:1.25,range:136,chains:7}] },
+  poison:{ name:'毒塔', desc:'剧毒·持续', color:'#6adf4a', cost:220, up:[180,320,560,900], unlock:20,
     descFull:'毒液持续伤害，克制高血量敌人',
-    lv:[{dmg:12,rate:0.9,range:108,pDps:20,pDur:3},{dmg:18,rate:1.0,range:116,pDps:34,pDur:4},{dmg:26,rate:1.1,range:124,pDps:55,pDur:5}] },
-  laser:{ name:'激光塔', desc:'穿透·直线', color:'#c46af0', cost:320, up:[280,480], unlock:30,
+    lv:[{dmg:12,rate:0.9,range:108,pDps:20,pDur:3},{dmg:18,rate:1.0,range:116,pDps:34,pDur:4},{dmg:26,rate:1.1,range:124,pDps:55,pDur:5},
+        {dmg:42,rate:1.2,range:132,pDps:88,pDur:6},{dmg:64,rate:1.3,range:140,pDps:140,pDur:7}] },
+  laser:{ name:'激光塔', desc:'穿透·直线', color:'#c46af0', cost:320, up:[280,480,800,1200], unlock:30,
     descFull:'高温光线穿透直线上所有敌人',
-    lv:[{dmg:60,rate:0.5,range:150},{dmg:95,rate:0.55,range:165},{dmg:150,rate:0.62,range:180}] },
+    lv:[{dmg:60,rate:0.5,range:150},{dmg:95,rate:0.55,range:165},{dmg:150,rate:0.62,range:180},
+        {dmg:240,rate:0.68,range:190},{dmg:380,rate:0.75,range:200}] },
 };
 const TOWER_KEYS=Object.keys(TOWERS);
+/* Lv4/Lv5 解锁波次：开场塔为第10/20波；后期解锁的塔顺延10波 */
+function towerGate(type,lvNum){ return (TOWERS[type].unlock||0) + (lvNum-3)*10; }
 
 /* 敌人定义：按功能六类（高速杂兵/重甲慢速/飞行/刺客/精英/Boss同源放大2倍） */
 const ENEMIES={
@@ -502,7 +515,7 @@ function towerFire(t,dt,now){
     // 炮弹飞向预测点即可：目标位置近似
     G.bullets[G.bullets.length-1].tx=best.pos.x; G.bullets[G.bullets.length-1].ty=best.pos.y;
   }else if(t.type==='lightning'){
-    // 链式闪电：主目标即时命中，向附近敌人跳跃，逐跳衰减
+    // 链式闪电：主目标即时命中，向附近敌人跳跃，逐跳衰减×0.8，伤害飘字显示
     t.zapT=now;
     const hitSet=new Set();
     let cur=best, dmg=st.dmg*buff, px=t.x, py=t.y;
@@ -511,8 +524,9 @@ function towerFire(t,dt,now){
       if(!cur) break;
       hitSet.add(cur);
       hurt(cur,dmg,now);
+      addFloat(cur.pos.x,cur.pos.y-8,'-'+Math.round(dmg),'#f8f0a0');
       const cpos=cur.pos; px=cpos.x; py=cpos.y;
-      dmg*=0.7;
+      dmg*=0.8;
       let nxt=null, nd=130*130;
       for(const e of G.enemies){
         if(e.dead||hitSet.has(e)) continue;
@@ -817,27 +831,47 @@ function drawTower(t,now){
   const d=TOWERS[t.type];
   const ang=(t.ang===undefined)?-Math.PI/2:t.ang;
   const lvl=t.lvl||0;
-  /* 底座：等级越高越华丽（Lv3 金边+金环） */
-  ctx.fillStyle=['#2a382a','#324232','#3a4a36'][lvl];
+  const L=Math.min(lvl,2);   // 外观三档（Lv4/5 沿用金装形态，另有白金外框+等级点区分）
+  /* 底座：等级越高越华丽（Lv3 金边+金环，Lv4/5 白金双框） */
+  ctx.fillStyle=['#2a382a','#324232','#3a4a36'][L];
   ctx.beginPath(); ctx.roundRect(t.x-17,t.y-17,34,34,7); ctx.fill();
-  ctx.strokeStyle=lvl===2?'#f0dc78':d.color;
-  ctx.lineWidth=2+lvl*0.5;
+  ctx.strokeStyle=lvl>=2?'#f0dc78':d.color;
+  ctx.lineWidth=2+L*0.5;
   ctx.beginPath(); ctx.roundRect(t.x-17,t.y-17,34,34,7); ctx.stroke();
-  if(lvl===2){
+  if(lvl>=2){
     ctx.strokeStyle='rgba(240,220,120,.4)'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.roundRect(t.x-14.5,t.y-14.5,29,29,5); ctx.stroke();
   }
-  if(t.type==='arrow') drawArrowTower(t,ang,lvl);
-  else if(t.type==='cannon') drawCannonTower(t,ang,lvl,now);
-  else if(t.type==='frost') drawFrostTower(t,now,lvl);
-  else if(t.type==='lightning') drawLightningTower(t,ang,lvl,now);
-  else if(t.type==='poison') drawPoisonTower(t,lvl,now);
-  else drawLaserTower(t,ang,lvl,now);
-  /* 等级点 */
-  ctx.fillStyle='#f0dc78';
-  for(let i=0;i<lvl+1;i++){
-    ctx.beginPath(); ctx.arc(t.x-8+i*8,t.y+22,2.4,0,Math.PI*2); ctx.fill();
+  if(lvl>=3){ /* Lv4/5 白金外框 */
+    ctx.strokeStyle='rgba(235,242,255,.65)'; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.roundRect(t.x-19.5,t.y-19.5,39,39,8); ctx.stroke();
   }
+  if(lvl>=4){ /* Lv5 顶角白金星标 */
+    ctx.fillStyle='#f4f8ff';
+    drawStar(t.x,t.y-24,3.4);
+  }
+  if(t.type==='arrow') drawArrowTower(t,ang,L);
+  else if(t.type==='cannon') drawCannonTower(t,ang,L,now);
+  else if(t.type==='frost') drawFrostTower(t,now,L);
+  else if(t.type==='lightning') drawLightningTower(t,ang,L,now);
+  else if(t.type==='poison') drawPoisonTower(t,L,now);
+  else drawLaserTower(t,ang,L,now);
+  /* 等级点（最多5个，居中） */
+  ctx.fillStyle='#f0dc78';
+  const dots=lvl+1, sx=t.x-(dots-1)*4;
+  for(let i=0;i<dots;i++){
+    ctx.beginPath(); ctx.arc(sx+i*8,t.y+22,2.2,0,Math.PI*2); ctx.fill();
+  }
+}
+function drawStar(x,y,r){
+  ctx.beginPath();
+  for(let i=0;i<10;i++){
+    const a=-Math.PI/2+i*Math.PI/5;
+    const rr=i%2===0?r:r*0.45;
+    const px=x+Math.cos(a)*rr, py=y+Math.sin(a)*rr;
+    i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+  }
+  ctx.closePath(); ctx.fill();
 }
 
 /* 雷塔：Lv1单杆顶球 → Lv2双线圈+电弧 → Lv3金座大球+绕体电弧 */
@@ -1538,7 +1572,7 @@ function selectTower(t){
   let info='伤害 '+Math.round(st.dmg*dmgBuff())+' · 射速 '+st.rate+'/s · 射程 '+st.range;
   if(st.slow) info+=' · 减速至'+Math.round(st.slow*100)+'%';
   if(st.blast) info+=' · 溅射半径 '+st.blast;
-  if(st.chains) info+=' · 闪电连锁'+st.chains+'目标';
+  if(st.chains) info+=' · 闪电连锁'+st.chains+'目标·逐跳×80%';
   if(st.pDps) info+=' · 毒伤'+Math.round(st.pDps*dmgBuff())+'/s×'+st.pDur+'s';
   if(t.type==='laser') info+=' · 直线穿透全伤';
   const buffPct=Math.round((dmgBuff()-1)*100);
@@ -1546,16 +1580,25 @@ function selectTower(t){
   info+='<br>已投入 '+towerSpent(t)+'，拆除返还 '+Math.floor(towerSpent(t)*0.7);
   document.getElementById('towerInfo').innerHTML=info;
   const upBtn=document.getElementById('upBtn');
-  if(t.lvl<2){
+  if(t.lvl<4){
     const cost=d.up[t.lvl];
-    upBtn.textContent='升级 Lv'+(t.lvl+2)+'（'+cost+'）';
+    const nextLvl=t.lvl+2;
+    const gateW=towerGate(t.type,nextLvl);
     upBtn.style.display='block';
-    upBtn.onclick=()=>{
-      if(G.gold<cost){ addFloat(W/2,H/2,'金币不足','#ff9d9d'); return; }
-      G.gold-=cost; t.lvl++;
-      boom(t.x,t.y,26,'#f0dc78');
-      selectTower(t); updateHUD();
-    };
+    if(G.wave>=gateW){
+      upBtn.disabled=false;
+      upBtn.textContent='升级 Lv'+nextLvl+'（'+cost+'）';
+      upBtn.onclick=()=>{
+        if(G.gold<cost){ addFloat(W/2,H/2,'金币不足','#ff9d9d'); return; }
+        G.gold-=cost; t.lvl++;
+        boom(t.x,t.y,26,'#f0dc78');
+        selectTower(t); updateHUD();
+      };
+    }else{
+      upBtn.disabled=true;
+      upBtn.textContent='Lv'+nextLvl+' · 第'+gateW+'波解锁';
+      upBtn.onclick=()=>{};
+    }
   }else{
     upBtn.style.display='none';
   }
@@ -1904,6 +1947,9 @@ document.getElementById('againBtn').addEventListener('click',()=>{
 });
 
 async function showBoard(){
+  const inGame=G&&liveGame&&!G.over;
+  if(inGame) pauseForPanel();   // 游戏中打开排行榜：自动暂停，返回时继续
+  document.getElementById('boardBtn2').textContent=inGame?'返回游戏':'返回';
   showPanel('boardBox');
   const list=document.getElementById('rankList');
   const provList=document.getElementById('provList');
@@ -1956,10 +2002,14 @@ document.getElementById('tabProv').addEventListener('click',()=>{
   document.getElementById('provList').style.display='block';
 });
 document.getElementById('boardBtn1').addEventListener('click',showBoard);
+document.getElementById('boardBtn3').addEventListener('click',()=>{
+  if(!G) return;
+  showBoard();
+});
 document.getElementById('boardBtn2').addEventListener('click',()=>{
-  if(G&&G.over&&!G.submitted) showPanel('endBox');
-  else if(G&&G.over) showPanel('endBox');
-  else showPanel('startBox');
+  if(G&&liveGame&&!G.over){ hideOverlay(); resumeFromPanel(); return; }
+  if(G&&G.over){ showPanel('endBox'); return; }
+  showPanel('startBox');
 });
 
 /* ================= 背景音乐（Web Audio 程序化合成，无外部文件） ================= */
