@@ -57,16 +57,18 @@
   #skillBtn.cooling { filter:grayscale(.5) brightness(.8); }
   .leakLine b { color:#ff8a7d !important; }
   /* 塔面板内按钮行高度收敛 */
-  /* 难度选择卡 */
-  .diffRow { display:flex; gap:8px; margin:12px 0 4px; }
+  /* 难度选择卡（选难度，统一用下方大按钮开局） */
+  .diffRow { display:flex; gap:8px; margin:10px 0 0; }
   .dcard {
     flex:1; border:1.5px solid #3a4d3a; border-radius:12px; background:#243224;
-    padding:10px 4px 8px; text-align:center; position:relative;
+    padding:10px 4px 8px; text-align:center; position:relative; cursor:pointer;
+    transition:filter .12s, transform .12s;
   }
+  .dcard:active { transform:scale(.96); filter:brightness(1.3); }
   .dcard.on { background:#334533; border-color:#8fd48f; box-shadow:0 0 0 1px #8fd48f inset; }
-  .dcard .dn { font-size:15px; font-weight:700; }
-  .dcard .dd { font-size:10.5px; color:#93a893; margin-top:4px; line-height:1.5; }
+  .dcard .dn { font-size:16px; font-weight:700; }
   .dcard.on .dn { color:#e8f0e8; }
+  .dcard .dd { font-size:10.5px; color:#93a893; margin-top:5px; line-height:1.55; }
 
   /* 底部操作区 */
   #bottom {
@@ -162,6 +164,7 @@
     background:linear-gradient(#9fe09f,#6fbf6f);
   }
   .ghost { background:#243224; color:#cfe3cf; border:1px solid #3a4d3a; }
+  #startBtn { margin-top:2px; }
 
   /* 排行榜 */
   #boardBox { display:none; }
@@ -230,7 +233,7 @@
         <div class="dn" style="color:#8fd48f">简单</div>
         <div class="dd">生命25 · 怪血×0.85<br>怪速-8% · 金币+25%</div>
       </div>
-      <div class="dcard on" data-diff="normal">
+      <div class="dcard" data-diff="normal">
         <div class="dn" style="color:#f3ce6a">困难</div>
         <div class="dd">生命20 · 怪血×1.1<br>怪速+6% · 标准难度</div>
       </div>
@@ -239,7 +242,9 @@
         <div class="dd">生命12 · 怪血×1.35<br>怪速+15% · 勇者挑战</div>
       </div>
     </div>
-    <div class="sub" id="diffNote" style="margin:2px 0 8px">当前：困难（20生命 · 怪血×1.1 · 怪速+6% · 金币+0%）</div>
+    <button class="big" id="startBtn">开始守塔</button>
+    <div class="sub" id="diffNote" style="margin:8px 0 0">当前：困难（20生命 · 怪血×1.1 · 怪速+6% · 金币+0%）</div>
+    <button class="big ghost" id="boardBtn1" style="margin:12px 0 0">查看排行榜</button>
     <div class="tinfo" style="text-align:left">
       · 点击空地<b style="color:#f3ce6a">建塔</b>，点击已建塔<b style="color:#f3ce6a">升级/拆除</b><br>
       · 箭塔速射 · 炮塔溅射 · 冰塔减速 —— 坚守解锁更多兵种：<br>
@@ -257,8 +262,6 @@
       · 总分公式：波次×500+击杀×50+剩余生命×100+剩余金币（结算页有明细）<br>
       · 右下「❄冰冻」大招：全体敌人冻结3秒（45秒冷却）· 右上「速」可2倍加速
     </div>
-    <button class="big" id="startBtn">开始守塔</button>
-    <button class="big ghost" id="boardBtn1" style="margin-top:10px">查看排行榜</button>
   </div>
 
   <div class="panel" id="endBox" style="display:none">
@@ -2212,12 +2215,19 @@ function showPanel(id){
 }
 function hideOverlay(){ document.getElementById('overlay').classList.remove('on'); }
 
+/* 开局统一入口（「开始守塔」大按钮触发） */
 document.getElementById('startBtn').addEventListener('click',()=>{
-  if(readSave() && !confirm('开始新局将覆盖已保存的进度，确定？')) return;
+  if(!beginGame()) return;
+  showToast('以「'+DIFFS[DIFF].name+'」难度开局 · 第1波5秒后来袭',2200);
+});
+
+function beginGame(){
+  if(readSave() && !confirm('开始新局将覆盖已保存的进度，确定？')) return false;
   G=newGame(); G.diff=DIFF; paused=false; liveGame=true; updateHUD();
   hideOverlay(); hideSheets();
   Music.start();
-});
+  return true;
+}
 
 function endGame(){
   if(G.over) return;
@@ -2456,23 +2466,22 @@ fitCanvas();
 fillProvSel(document.getElementById('eProvSel'),true);
 fillProvSel(document.getElementById('mProvSel'),false);
 detectReportHost().then(h=>{REPORT_HOST=h;});
-/* 记忆上次难度选择 */
+/* 记忆上次难度选择（恢复选中态） */
 try{
   const d=localStorage.getItem('td_diff');
   if(d&&DIFFS[d]){
     DIFF=d;
-    document.querySelectorAll('.dcard').forEach(x=>x.classList.toggle('on',x.dataset.diff===d));
-    document.getElementById('diffNote').textContent=diffDesc();
   }
 }catch(e){}
+document.querySelectorAll('.dcard').forEach(x=>x.classList.toggle('on',x.dataset.diff===DIFF));
+document.getElementById('diffNote').textContent=diffDesc();
 (function initResume(){
   const s=readSave();
   if(s){
     document.getElementById('resumeBtn').style.display='block';
     const si=document.getElementById('saveInfo');
     si.style.display='block';
-    si.textContent='上次进度：第'+s.wave+'波 · 击杀'+s.kills+' · 得分'+(s.score||0)+' · 生命'+s.lives;
-    document.getElementById('startBtn').textContent='开始新局';
+    si.textContent='上次进度：第'+s.wave+'波 · 击杀'+s.kills+' · 得分'+(s.score||0)+' · 生命'+s.lives+(s.diff?' · '+DIFFS[s.diff].name+'难度':'');
   }
 })();
 showPanel('startBox');
