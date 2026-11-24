@@ -1684,8 +1684,8 @@ function mergeBoards(shared,local){
   return Array.from(map.values());
 }
 
-/* 开放上报：备用地址（GitHub Pages）无后端，上报直达主服务器（跨域已开）；
-   主服务器不可达时降级提示。地址由 备用地址上线时写入的 REPORT_HOST 文件提供。 */
+/* 数据层三级链路：同源后端 → 跨域直达主服务器（全国实时榜）→ GitHub共享榜+本机（降级）。
+   主服务器地址存于同目录 report-host.json（由主电脑守护自动维护，隧道换地址自动更新）。 */
 async function detectReportHost(){
   try{
     const r=await fetch('report-host.json',{cache:'no-store'});
@@ -1694,68 +1694,100 @@ async function detectReportHost(){
   return '';
 }
 let REPORT_HOST='';
+let remoteFailUntil=0;   // 主服务器连不上后的60秒冷却（避免每次开榜都等超时）
+
+async function fetchJSON(url,opts,timeoutMs){
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(),timeoutMs||5000);
+  try{
+    const res=await fetch(url,{...opts,signal:ctrl.signal});
+    if(!res.ok) throw new Error('http '+res.status);
+    return await res.json();
+  }finally{ clearTimeout(timer); }
+}
+function remoteReady(){ return !!REPORT_HOST && Date.now()>remoteFailUntil; }
+function noteRemoteFail(){
+  remoteFailUntil=Date.now()+60000;
+  /* 冷却同时拉一次最新主机地址（隧道可能刚换） */
+  detectReportHost().then(h=>{ if(h) REPORT_HOST=h; });
+}
 
 const API={
+  /* 成绩提交：进全国榜（实时优先） */
   async submitScore(rec){
     try{
-      const res=await fetch('/api/score',{
+      const data=await fetchJSON('/api/score',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(rec),
-      });
-      const data=await res.json();
+      },4000);
       if(data&&data.ok) return {ok:true,mode:'server'};
       throw new Error('bad');
-    }catch(e){
-      LocalBoard.upsert(rec);
-      return {ok:true,mode:'local'};
+    }catch(e){}
+    if(remoteReady()){
+      try{
+        const data=await fetchJSON(REPORT_HOST+'/api/score',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(rec),
+        },5000);
+        if(data&&data.ok) return {ok:true,mode:'remote'};
+        throw new Error('bad');
+      }catch(e){ noteRemoteFail(); }
     }
+    LocalBoard.upsert(rec);
+    return {ok:true,mode:'local'};
   },
-  /* 上报：把本机榜成绩送进共享榜（有后端走后端，无后端跨域直达主服务器） */
+  /* 批量上报本机榜 */
   async reportScores(){
     const local=LocalBoard.load();
     if(!local.length) return {ok:false,reason:'本机榜没有成绩'};
     const payload={scores:local};
     try{
-      const res=await fetch('/api/report',{
+      const data=await fetchJSON('/api/report',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(payload),
-      });
-      const data=await res.json();
+      },4000);
       if(data&&data.ok) return {ok:true,mode:'server',merged:data.merged||0};
       throw new Error('bad');
-    }catch(e){
-      /* 静态环境：跨域上报到主服务器（它再同步到 GitHub 共享榜） */
-      if(!REPORT_HOST) return {ok:false,reason:'主服务器地址未就绪'};
+    }catch(e){}
+    if(remoteReady()){
       try{
-        const r2=await fetch(REPORT_HOST+'/api/report',{
+        const data=await fetchJSON(REPORT_HOST+'/api/report',{
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify(payload),
-        });
-        const d2=await r2.json();
-        if(d2&&d2.ok) return {ok:true,mode:'remote',merged:d2.merged||0};
-        return {ok:false,reason:(d2&&d2.msg)||'上报失败'};
-      }catch(e2){
-        return {ok:false,reason:'主服务器不可达'};
-      }
+        },6000);
+        if(data&&data.ok) return {ok:true,mode:'remote',merged:data.merged||0};
+        return {ok:false,reason:(data&&data.msg)||'上报失败'};
+      }catch(e){ noteRemoteFail(); return {ok:false,reason:'主服务器不可达'}; }
     }
+    return {ok:false,reason:'主服务器离线（稍后自动重试）'};
   },
+  /* 榜单读取：全国实时榜优先 */
   async fetchBoard(){
     try{
-      const res=await fetch('/api/scores');
-      const data=await res.json();
+      const data=await fetchJSON('/api/scores',{},4000);
       if(data&&data.ok) return {ok:true,mode:'server',scores:data.scores||[],provinces:data.provinces||[]};
       throw new Error('bad');
-    }catch(e){
-      /* 无后端：读同源静态 scores.json（GitHub Pages 共享榜）+ 本机榜合并 */
-      let shared=[];
+    }catch(e){}
+    if(remoteReady()){
       try{
-        const r2=await fetch('scores.json',{cache:'no-store'});
-        const d2=await r2.json();
-        if(d2&&Array.isArray(d2.scores)) shared=d2.scores;
-      }catch(e2){}
-      const merged=LocalBoard._rank(mergeBoards(shared,LocalBoard.load()));
-      return {ok:true,mode:'local',shared:shared.length>0,scores:merged,provinces:LocalBoard.provStandings(merged)};
+        const data=await fetchJSON(REPORT_HOST+'/api/scores',{},4500);
+        if(data&&data.ok){
+          /* 实时全国榜 + 本机榜合并显示（本机未上报的也能看到自己） */
+          const merged=LocalBoard._rank(mergeBoards(data.scores||[],LocalBoard.load()));
+          return {ok:true,mode:'remote',scores:merged,provinces:LocalBoard.provStandings(merged)};
+        }
+        throw new Error('bad');
+      }catch(e){ noteRemoteFail(); }
     }
+    /* 降级：GitHub 共享榜（约5分钟同步）+ 本机榜 */
+    let shared=[];
+    try{
+      const r2=await fetch('scores.json',{cache:'no-store'});
+      const d2=await r2.json();
+      if(d2&&Array.isArray(d2.scores)) shared=d2.scores;
+    }catch(e2){}
+    const merged=LocalBoard._rank(mergeBoards(shared,LocalBoard.load()));
+    return {ok:true,mode:'local',shared:shared.length>0,scores:merged,provinces:LocalBoard.provStandings(merged)};
   }
 };
 
@@ -1997,10 +2029,10 @@ async function showBoard(){
   list.innerHTML='<div class="rankEmpty">读取中…</div>';
   provList.innerHTML='';
   const data=await API.fetchBoard();
-  /* 上报按钮：本机榜有成绩且当前是本机榜模式（联机模式成绩已在服务端）才显示 */
+  /* 上报按钮：非同源联机模式下，本机榜有未上榜成绩就显示 */
   const rBtn=document.getElementById('reportBtn');
-  const localCount=data.mode==='local'?LocalBoard.load().length:0;
-  if(data.mode==='local'&&localCount>0){
+  const localCount=(data.mode==='local'||data.mode==='remote')?LocalBoard.load().length:0;
+  if(localCount>0){
     rBtn.style.display='block';
     rBtn.disabled=false;
     rBtn.textContent='我的成绩上榜（'+localCount+'条）';
@@ -2008,9 +2040,9 @@ async function showBoard(){
     rBtn.style.display='none';
   }
   const sub=document.querySelector('#boardBox .sub');
-  if(sub) sub.textContent=data.mode==='server'
-    ?'同昵称只保留最高分'
-    :(data.shared?'全国/省份榜（GitHub共享+本机合并）':'本机榜（仅存本浏览器）· 同名保留最高分');
+  if(sub) sub.textContent=
+    (data.mode==='server'||data.mode==='remote')?'全国实时榜 · 同名保留最高分'
+    :(data.shared?'全国榜（约5分钟同步+本机）· 主电脑离线':'本机榜（仅存本浏览器）· 主电脑离线');
   if(!data.scores.length){
     list.innerHTML='<div class="rankEmpty">暂无成绩，等你来开荒！</div>';
   }else{
@@ -2063,24 +2095,10 @@ document.getElementById('reportBtn').addEventListener('click',async()=>{
   btn.disabled=true; btn.textContent='上报中…';
   const r=await API.reportScores();
   if(r.ok){
-    btn.textContent='✓ 已上榜';
-    showToast('成绩已上榜！刷新榜单中…',2500);
-    /* 重新拉榜看合并结果（含共享榜） */
-    const data=await API.fetchBoard();
-    const list=document.getElementById('rankList');
-    if(data.scores.length){
-      list.innerHTML='';
-      data.scores.slice(0,20).forEach(s=>{
-        const row=document.createElement('div');
-        row.className='rankRow';
-        const pc=s.province?'<span class="pc">'+provShort(s.province)+'</span>':'';
-        row.innerHTML='<div class="rk">'+s.rank+'</div>'+pc+'<div class="nm"></div>'+
-          '<div class="sc">'+s.score+'</div><div class="wv">第'+s.wave+'波</div>';
-        row.querySelector('.nm').textContent=s.name;
-        list.appendChild(row);
-      });
-    }
-    setTimeout(()=>{btn.textContent='我的成绩上榜';btn.disabled=false;},2500);
+    /* 上报成功：成绩已在全国榜，清空本机榜避免重复提示 */
+    LocalBoard.save([]);
+    showToast('成绩已上榜！全国实时榜刷新中…',2500);
+    await showBoard();          // 重新拉实时榜并渲染（含按钮自动隐藏）
   }else{
     btn.disabled=false;
     btn.textContent='上报失败，重试';
