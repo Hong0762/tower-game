@@ -56,6 +56,17 @@
   }
   #skillBtn.cooling { filter:grayscale(.5) brightness(.8); }
   .leakLine b { color:#ff8a7d !important; }
+  /* 塔面板内按钮行高度收敛 */
+  /* 难度选择卡 */
+  .diffRow { display:flex; gap:8px; margin:12px 0 4px; }
+  .dcard {
+    flex:1; border:1.5px solid #3a4d3a; border-radius:12px; background:#243224;
+    padding:10px 4px 8px; text-align:center; position:relative;
+  }
+  .dcard.on { background:#334533; border-color:#8fd48f; box-shadow:0 0 0 1px #8fd48f inset; }
+  .dcard .dn { font-size:15px; font-weight:700; }
+  .dcard .dd { font-size:10.5px; color:#93a893; margin-top:4px; line-height:1.5; }
+  .dcard.on .dn { color:#e8f0e8; }
 
   /* 底部操作区 */
   #bottom {
@@ -64,34 +75,37 @@
     background:#182318; border-top:1px solid #2c3a2c;
   }
   #waveBar { display:flex; gap:8px; align-items:center; }
-  #waveInfo { flex:1; font-size:13px; color:#a8c0a8; }
+  #waveInfo { flex:1; font-size:12.5px; color:#a8c0a8; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #callBtn {
     flex:0 0 auto; border:none; border-radius:12px; padding:10px 16px;
     font-size:15px; font-weight:700; color:#0f1a0f;
-    background:linear-gradient(#9fe09f,#6fbf6f); width:132px;
+    background:linear-gradient(#9fe09f,#6fbf6f); width:110px;
   }
   #callBtn:active { filter:brightness(.9); }
 
-  /* 通用面板：弹出时覆盖含底部操作条（不建时自动隐藏） */
+  /* 通用面板：固定底部，弹出时底条让位（彻底零重叠） */
   .sheet {
     position:fixed; left:0; right:0; bottom:0; z-index:40;
     max-width:480px; margin:0 auto;
     background:#1c281c; border-top:2px solid #3a4d3a;
-    padding:12px 14px calc(14px + env(safe-area-inset-bottom));
+    padding:10px 12px calc(10px + env(safe-area-inset-bottom));
     display:none;
   }
   .sheet.on { display:block; }
-  /* 面板开着时：底部操作条隐藏，不再互相遮挡 */
+  /* 面板开着时：底部操作条隐藏（固定底对齐，无叠压、无空隙） */
   #bottom.hideforSheet { display:none; }
-  .sheet h3 { font-size:14px; color:#b8d0b8; margin-bottom:10px; font-weight:600; }
+  .sheet h3 { font-size:13.5px; color:#b8d0b8; margin-bottom:6px; font-weight:600; }
   .btnRow { display:flex; gap:8px; }
+  #towerInfo { font-size:11.5px; color:#a8c0a8; margin-bottom:6px; line-height:1.55; }
+  #towerSheet .btnUp, #towerSheet .btnSell { padding:10px 13px; font-size:14px; }
+  #towerSheet .btnSell { margin-top:6px; padding:8px 13px; }
   .tcard {
     flex:1; border:1px solid #3a4d3a; border-radius:12px; background:#243224;
-    padding:10px 6px; text-align:center;
+    padding:9px 4px; text-align:center; min-width:0;
   }
   .tcard.off { opacity:.38; }
-  .tcard .tn { font-size:15px; font-weight:700; }
-  .tcard .td { font-size:11px; color:#93a893; margin:3px 0 5px; min-height:14px; }
+  .tcard .tn { font-size:14px; font-weight:700; }
+  .tcard .td { font-size:10.5px; color:#93a893; margin:3px 0 5px; min-height:14px; }
   .tcard .tc { font-size:15px; font-weight:700; color:#f3ce6a; }
   .tcard:active { filter:brightness(1.25); }
   .wide { width:100%; border:none; border-radius:12px; padding:13px; font-size:15px; font-weight:700; }
@@ -209,8 +223,23 @@
   <div class="panel" id="startBox">
     <h2>守塔军师</h2>
     <div class="sub">敌军更强更快 · 每10波记录全国省份排名</div>
-    <button class="big" id="resumeBtn" style="display:none;margin-top:0">继续上次进度</button>
-    <div class="sub" id="saveInfo" style="display:none;margin:6px 0 12px"></div>
+    <button class="big" id="resumeBtn" style="display:none;margin:0 0 10px">继续上次进度</button>
+    <div class="sub" id="saveInfo" style="display:none;margin:0 0 10px"></div>
+    <div class="diffRow">
+      <div class="dcard" data-diff="easy">
+        <div class="dn" style="color:#8fd48f">简单</div>
+        <div class="dd">生命25 · 怪血×0.85<br>怪速-8% · 金币+25%</div>
+      </div>
+      <div class="dcard on" data-diff="normal">
+        <div class="dn" style="color:#f3ce6a">困难</div>
+        <div class="dd">生命20 · 怪血×1.1<br>怪速+6% · 标准难度</div>
+      </div>
+      <div class="dcard" data-diff="hard">
+        <div class="dn" style="color:#ff8a7d">地狱</div>
+        <div class="dd">生命12 · 怪血×1.35<br>怪速+15% · 勇者挑战</div>
+      </div>
+    </div>
+    <div class="sub" id="diffNote" style="margin:2px 0 8px">当前：困难（20生命 · 怪血×1.1 · 怪速+6% · 金币+0%）</div>
     <div class="tinfo" style="text-align:left">
       · 点击空地<b style="color:#f3ce6a">建塔</b>，点击已建塔<b style="color:#f3ce6a">升级/拆除</b><br>
       · 箭塔速射 · 炮塔溅射 · 冰塔减速 —— 坚守解锁更多兵种：<br>
@@ -366,7 +395,7 @@ let G=null, paused=false, lastT=0, running=false;
 
 function newGame(){
   return {
-    gold:200, lives:20, wave:0, kills:0, score:0, leaked:0,
+    gold:Math.round(200*DIFFS[DIFF].goldMul), lives:DIFFS[DIFF].lives, wave:0, kills:0, score:0, leaked:0,
     enemies:[], towers:[], bullets:[], fx:[], floats:[],
     phase:'idle', countdown:5, queue:[], spawnGap:0, spawnIdx:0,
     sel:null, over:false, submitted:false, skillAt:-999,
@@ -425,10 +454,30 @@ function calcScore(g){
   return g.kills*50 + g.wave*500 + Math.max(0,g.lives)*100 + Math.max(0,Math.floor(g.gold));
 }
 
+/* ================= 难度系统 ================= */
+const DIFFS={
+  easy:   {name:'简单', lives:25, hpMul:0.85, spdMul:0.92, goldMul:1.25},
+  normal: {name:'困难', lives:20, hpMul:1.10, spdMul:1.06, goldMul:1.00},
+  hard:   {name:'地狱', lives:12, hpMul:1.35, spdMul:1.15, goldMul:0.90},
+};
+let DIFF='normal';
+function diffDesc(){
+  const d=DIFFS[DIFF];
+  return `当前：${d.name}（${d.lives}生命 · 怪血×${d.hpMul} · 怪速${d.spdMul>=1?'+':''}${Math.round((d.spdMul-1)*100)}% · 金币${d.goldMul>=1?'+':'-'}${Math.round(Math.abs(d.goldMul-1)*100)}%）`;
+}
+document.querySelectorAll('.dcard').forEach(el=>{
+  el.addEventListener('click',()=>{
+    DIFF=el.dataset.diff;
+    document.querySelectorAll('.dcard').forEach(x=>x.classList.toggle('on',x===el));
+    document.getElementById('diffNote').textContent=diffDesc();
+    try{ localStorage.setItem('td_diff',DIFF); }catch(e){}
+  });
+});
+
 /* ================= 敌人 ================= */
 function spawnEnemy(type,w){
   const d=ENEMIES[type];
-  const hpMul=Math.pow(1.22,w-1), spdMul=1+Math.min(.9,w*0.015);
+  const hpMul=Math.pow(1.22,w-1)*DIFFS[DIFF].hpMul, spdMul=(1+Math.min(.9,w*0.015))*DIFFS[DIFF].spdMul;
   const hp=Math.round(d.hp*hpMul);
   if(d.cat==='boss'){
     showToast('⚠ '+d.name+'登场！',2600);
@@ -600,7 +649,8 @@ function hurt(e,dmg,now,flash){
   if(flash) e.flashUntil=(now||0)+0.09;
   if(e.hp<=0){
     e.dead=true; e.killed=true;
-    G.gold+=e.bounty; G.kills++;
+    G.gold+=Math.round(e.bounty*DIFFS[DIFF].goldMul);
+    G.kills++;
     G.score=calcScore(G);
     addFloat(e.pos.x,e.pos.y,'+'+e.bounty,'#f3ce6a');
     boom(e.pos.x,e.pos.y,e.r+4,e.color);
@@ -686,8 +736,8 @@ function update(dt,now){
       G.spawnGap=0.6;
     }
     if(G.spawnIdx>=G.queue.length&&G.enemies.length===0){
-      // 波清空奖励
-      const bonus=20+w*3;
+      // 波清空奖励（按难度金币系数）
+      const bonus=Math.round((20+w*3)*DIFFS[DIFF].goldMul);
       G.gold+=bonus;
       addFloat(W/2,H/2,'波次奖励 +'+bonus,'#f3ce6a');
       G.phase='idle'; G.countdown=5;
@@ -1734,6 +1784,7 @@ function selectTower(t){
   if(st.chains) info+=' · 闪电连锁'+st.chains+'目标·逐跳×80%';
   if(st.pDps) info+=' · 毒伤'+Math.round(st.pDps*dmgBuff())+'/s×'+st.pDur+'s';
   if(t.type==='laser') info+=' · 直线穿透全伤';
+  if(DIFFS[DIFF].goldMul!==1) info+='<br><span style="color:#93a893">难度金币'+(DIFFS[DIFF].goldMul>1?'+':'')+Math.round((DIFFS[DIFF].goldMul-1)*100)+'%</span>';
   const buffPct=Math.round((dmgBuff()-1)*100);
   info+='<br><span style="color:#8fd48f">全军强化 +'+buffPct+'%（每坚守10波+5%）</span>';
   info+='<br>已投入 '+towerSpent(t)+'，拆除返还 '+Math.floor(towerSpent(t)*0.7);
@@ -2093,6 +2144,7 @@ function saveGame(){
   if(!G||G.over||!liveGame) return;
   try{
     const s={
+      diff:DIFF,
       gold:G.gold, lives:G.lives, wave:G.wave, kills:G.kills, score:calcScore(G),
       enemies:G.enemies.map(e=>{
         const o={type:e.type,seg:e.seg,segT:e.segT,
@@ -2121,7 +2173,10 @@ function readSave(){
 function restoreGame(){
   const s=readSave();
   if(!s) return;
+  /* 恢复局内难度（旧档无 diff 字段默认 normal） */
+  if(s.diff&&DIFFS[s.diff]) DIFF=s.diff;
   G=newGame();
+  G.diff=DIFF;
   G.gold=s.gold||150; G.lives=s.lives; G.wave=s.wave; G.kills=s.kills||0;
   const TYPE_FIX={grunt:'slime',runner:'bat',tank:'crab',boss:'bossSlime'};
   G.enemies=(s.enemies||[])
@@ -2159,7 +2214,7 @@ function hideOverlay(){ document.getElementById('overlay').classList.remove('on'
 
 document.getElementById('startBtn').addEventListener('click',()=>{
   if(readSave() && !confirm('开始新局将覆盖已保存的进度，确定？')) return;
-  G=newGame(); paused=false; liveGame=true; updateHUD();
+  G=newGame(); G.diff=DIFF; paused=false; liveGame=true; updateHUD();
   hideOverlay(); hideSheets();
   Music.start();
 });
@@ -2171,7 +2226,7 @@ function endGame(){
   Music.stop();
   liveGame=false;
   try{ localStorage.removeItem('td_save'); }catch(e){}
-  document.getElementById('endSub').textContent='坚守到了第 '+G.wave+' 波 · 击杀 '+G.kills+' 敌军';
+  document.getElementById('endSub').textContent='坚守到了第 '+G.wave+' 波 · 击杀 '+G.kills+' 敌军 · 难度：'+DIFFS[G.diff||'normal'].name;
   document.getElementById('eWave').textContent=G.wave*500;
   document.getElementById('eKill').textContent=G.kills*50;
   document.getElementById('eLife').textContent=Math.max(0,G.lives)*100;
@@ -2392,6 +2447,7 @@ if(!CanvasRenderingContext2D.prototype.roundRect){
   };
 }
 G=newGame();
+G.diff=DIFF;
 updateHUD();
 running=true;
 requestAnimationFrame(tick);
@@ -2400,6 +2456,15 @@ fitCanvas();
 fillProvSel(document.getElementById('eProvSel'),true);
 fillProvSel(document.getElementById('mProvSel'),false);
 detectReportHost().then(h=>{REPORT_HOST=h;});
+/* 记忆上次难度选择 */
+try{
+  const d=localStorage.getItem('td_diff');
+  if(d&&DIFFS[d]){
+    DIFF=d;
+    document.querySelectorAll('.dcard').forEach(x=>x.classList.toggle('on',x.dataset.diff===d));
+    document.getElementById('diffNote').textContent=diffDesc();
+  }
+}catch(e){}
 (function initResume(){
   const s=readSave();
   if(s){
