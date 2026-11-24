@@ -63,15 +63,17 @@
   }
   #callBtn:active { filter:brightness(.9); }
 
-  /* 通用面板 */
+  /* 通用面板：弹出时覆盖含底部操作条（不建时自动隐藏） */
   .sheet {
-    position:fixed; left:0; right:0; bottom:0; z-index:30;
+    position:fixed; left:0; right:0; bottom:0; z-index:40;
     max-width:480px; margin:0 auto;
     background:#1c281c; border-top:2px solid #3a4d3a;
     padding:12px 14px calc(14px + env(safe-area-inset-bottom));
     display:none;
   }
   .sheet.on { display:block; }
+  /* 面板开着时：底部操作条隐藏，不再互相遮挡 */
+  #bottom.hideforSheet { display:none; }
   .sheet h3 { font-size:14px; color:#b8d0b8; margin-bottom:10px; font-weight:600; }
   .btnRow { display:flex; gap:8px; }
   .tcard {
@@ -1522,7 +1524,7 @@ cv.addEventListener('pointerdown',ev=>{
   const t=G.towers.find(t=>t.c===c&&t.r===r);
   if(t){ selectTower(t); return; }
   if(pathCells.has(c+','+r)){ G.sel=null; G.selTower=null; hideSheets(); return; }
-  /* 空地 → 建塔面板 */
+  /* 空地 → 建塔面板（点建筑才出现，不建自动隐藏） */
   G.sel={c,r}; G.selTower=null;
   showBuildSheet();
 }, {passive:false});
@@ -1530,7 +1532,21 @@ cv.addEventListener('pointerdown',ev=>{
 function hideSheets(){
   document.getElementById('buildSheet').classList.remove('on');
   document.getElementById('towerSheet').classList.remove('on');
+  document.getElementById('bottom').classList.remove('hideforSheet');
 }
+function hideSheetsAndClear(){
+  hideSheets();
+  if(G){ G.sel=null; G.selTower=null; }
+}
+
+/* 点页面任意空白处收起面板（恢复底部操作条） */
+document.addEventListener('pointerdown',ev=>{
+  if(!G||G.over) return;
+  const sheet=document.querySelector('.sheet.on');
+  if(!sheet) return;
+  if(sheet.contains(ev.target)||ev.target.closest('#canvasBox')) return;
+  hideSheets();
+},true);
 
 /* 建塔面板（未解锁兵种显示锁定状态） */
 function showBuildSheet(){
@@ -1563,6 +1579,7 @@ function showBuildSheet(){
     box.appendChild(el);
   }
   document.getElementById('buildSheet').classList.add('on');
+  document.getElementById('bottom').classList.add('hideforSheet');
 }
 
 function selectTower(t){
@@ -1610,6 +1627,7 @@ function selectTower(t){
     G.selTower=null; hideSheets(); updateHUD();
   };
   document.getElementById('towerSheet').classList.add('on');
+  document.getElementById('bottom').classList.add('hideforSheet');
 }
 
 /* 立即出怪 */
