@@ -47,6 +47,15 @@
   #musicBtn { right:54px; }
   #musicBtn.off { color:#7a907a; text-decoration:line-through; }
   #boardBtn3 { right:100px; font-size:13px; }
+  #speedBtn { right:146px; font-size:12px; }
+  #speedBtn.off { color:#7a907a; }
+  #skillBtn {
+    flex:0 0 auto; border:none; border-radius:12px; padding:10px 14px;
+    font-size:14px; font-weight:700; color:#0f1a28;
+    background:linear-gradient(#9fd4ff,#5a9fe0); width:110px;
+  }
+  #skillBtn.cooling { filter:grayscale(.5) brightness(.8); }
+  .leakLine b { color:#ff8a7d !important; }
 
   /* 底部操作区 */
   #bottom {
@@ -157,11 +166,12 @@
     <div class="stat gold"><div class="v" id="hGold">150</div><div class="k">金币</div></div>
     <div class="stat life"><div class="v" id="hLife">20</div><div class="k">生命</div></div>
     <div class="stat wave"><div class="v" id="hWave">0</div><div class="k">波次</div></div>
-    <div class="stat score"><div class="v" id="hScore">0</div><div class="k">得分</div></div>
+    <div class="stat score"><div class="v" id="hScore">0</div><div class="k">击杀</div></div>
   </div>
 
   <div id="canvasBox">
     <canvas id="cv" width="432" height="432"></canvas>
+    <button id="speedBtn" class="ctlBtn" title="倍速（塔射速同步加快）">速1×</button>
     <button id="boardBtn3" class="ctlBtn" title="查看排行榜（游戏中自动暂停）">榜</button>
     <button id="musicBtn" class="ctlBtn" title="音乐开关">♪</button>
     <button id="pauseBtn" class="ctlBtn">Ⅱ</button>
@@ -170,6 +180,7 @@
   <div id="bottom">
     <div id="waveBar">
       <div id="waveInfo">准备迎战…</div>
+      <button id="skillBtn" disabled>❄45s</button>
       <button id="callBtn">立即出怪</button>
     </div>
   </div>
@@ -179,7 +190,7 @@
 
 <!-- 建塔面板 -->
 <div class="sheet" id="buildSheet">
-  <h3>在此建造炮塔</h3>
+  <h3 id="buildTitle">选择要建造的塔（按住卡片看射程）</h3>
   <div class="btnRow" id="buildCards"></div>
 </div>
 
@@ -213,7 +224,9 @@
       · 精英15波起登场（萨满会给友军回血，优先击杀）<br>
       · 每10波出<b style="color:#ff9d7d">巨型Boss</b>（小怪放大2倍）；20波起成双<br>
       · <b style="color:#f3ce6a">每10波自动记录排名</b>（全国榜+省份榜）<br>
-      · <b style="color:#f3ce6a">进度自动保存</b>：有事随时退出，回来点「继续上次进度」
+      · <b style="color:#f3ce6a">进度自动保存</b>：有事随时退出，回来点「继续上次进度」<br>
+      · 总分公式：波次×500+击杀×50+剩余生命×100+剩余金币（结算页有明细）<br>
+      · 右下「❄冰冻」大招：全体敌人冻结3秒（45秒冷却）· 右上「速」可2倍加速
     </div>
     <button class="big" id="startBtn">开始守塔</button>
     <button class="big ghost" id="boardBtn1" style="margin-top:10px">查看排行榜</button>
@@ -226,6 +239,7 @@
     <div class="scoreLine"><span>击杀得分</span><b id="eKill">0</b></div>
     <div class="scoreLine"><span>剩余生命</span><b id="eLife">0</b></div>
     <div class="scoreLine"><span>剩余金币</span><b id="eGold">0</b></div>
+    <div class="scoreLine leakLine"><span>漏怪数量</span><b id="eLeak">0</b></div>
     <div class="scoreLine total"><span>总得分</span><b id="eTotal">0</b></div>
     <input type="text" id="nameInput" maxlength="12" placeholder="输入昵称上榜">
     <select id="eProvSel"></select>
@@ -282,29 +296,41 @@ for(let i=0;i<WAYPOINTS.length-1;i++){
 
 /* 塔定义：5级可升（Lv4/Lv5 分别在第10/20波后解锁，后期解锁的塔相应顺延）；unlockWave=解锁波次（0=开场可用） */
 const TOWERS={
-  arrow:{ name:'箭塔', desc:'速射·单体', color:'#4caf7d', cost:60,  up:[50,90,180,320], unlock:0,
+  arrow:{ name:'箭塔', desc:'速射·单体·克重甲', color:'#4caf7d', cost:60,  up:[50,90,180,320], unlock:0,
     lv:[{dmg:14,rate:1.4,range:96},{dmg:24,rate:1.6,range:104},{dmg:40,rate:1.9,range:112},
         {dmg:80,rate:2.2,range:120},{dmg:160,rate:2.5,range:128}] },
-  cannon:{ name:'炮塔', desc:'溅射·群伤', color:'#d0842f', cost:120, up:[100,180,340,600], unlock:0,
+  cannon:{ name:'炮塔', desc:'溅射·群伤', color:'#d0842f', cost:100, up:[100,180,340,600], unlock:0,
     lv:[{dmg:34,rate:0.55,range:128,blast:54},{dmg:58,rate:0.6,range:136,blast:58},{dmg:95,rate:0.66,range:144,blast:64},
         {dmg:190,rate:0.72,range:152,blast:70},{dmg:380,rate:0.8,range:160,blast:76}] },
   frost:{ name:'冰塔', desc:'减速·控场', color:'#4a9fe0', cost:80,  up:[60,110,200,360], unlock:0,
-    lv:[{dmg:8,rate:1.1,range:88,slow:.55,st:1.6},{dmg:13,rate:1.2,range:96,slow:.42,st:2.0},{dmg:20,rate:1.3,range:104,slow:.30,st:2.4},
-        {dmg:40,rate:1.45,range:112,slow:.24,st:2.8},{dmg:80,rate:1.6,range:120,slow:.18,st:3.2}] },
-  lightning:{ name:'雷塔', desc:'闪电·链击', color:'#f0e050', cost:160, up:[140,240,420,700], unlock:10,
-    descFull:'闪电连锁跳跃多个敌人',
+    lv:[{dmg:10,rate:1.1,range:88,slow:.55,st:1.8},{dmg:16,rate:1.2,range:96,slow:.42,st:2.2},{dmg:24,rate:1.3,range:104,slow:.30,st:2.6},
+        {dmg:48,rate:1.45,range:112,slow:.24,st:3.0},{dmg:88,rate:1.6,range:120,slow:.18,st:3.4}] },
+  lightning:{ name:'雷塔', desc:'闪电·链击·克飞行', color:'#f0e050', cost:160, up:[140,240,420,700], unlock:10,
+    descFull:'闪电连锁跳跃多个敌人，电弧对空额外加成',
     lv:[{dmg:45,rate:0.85,range:104,chains:3},{dmg:72,rate:0.95,range:112,chains:4},{dmg:115,rate:1.05,range:120,chains:5},
         {dmg:185,rate:1.15,range:128,chains:6},{dmg:300,rate:1.25,range:136,chains:7}] },
-  poison:{ name:'毒塔', desc:'剧毒·持续', color:'#6adf4a', cost:220, up:[180,320,560,900], unlock:20,
-    descFull:'毒液持续伤害，克制高血量敌人',
+  poison:{ name:'毒塔', desc:'剧毒·持续·克Boss', color:'#6adf4a', cost:220, up:[180,320,560,900], unlock:20,
+    descFull:'毒液持续伤害，对高血量敌人额外加成',
     lv:[{dmg:12,rate:0.9,range:108,pDps:20,pDur:3},{dmg:18,rate:1.0,range:116,pDps:34,pDur:4},{dmg:26,rate:1.1,range:124,pDps:55,pDur:5},
         {dmg:42,rate:1.2,range:132,pDps:88,pDur:6},{dmg:64,rate:1.3,range:140,pDps:140,pDur:7}] },
-  laser:{ name:'激光塔', desc:'穿透·直线', color:'#c46af0', cost:320, up:[280,480,800,1200], unlock:30,
+  laser:{ name:'激光塔', desc:'穿透·直线·克飞行', color:'#c46af0', cost:320, up:[280,480,800,1200], unlock:30,
     descFull:'高温光线穿透直线上所有敌人',
     lv:[{dmg:60,rate:0.5,range:150},{dmg:95,rate:0.55,range:165},{dmg:150,rate:0.62,range:180},
         {dmg:240,rate:0.68,range:190},{dmg:380,rate:0.75,range:200}] },
 };
 const TOWER_KEYS=Object.keys(TOWERS);
+/* 克制关系：塔型 → 怪类 → 伤害倍率 */
+const COUNTERS={
+  arrow:{armor:1.25},
+  lightning:{fly:1.4},
+  poison:{boss:1.3},
+  laser:{fly:1.5,armor:1.25},
+};
+function counterMult(towType,enemyType){
+  const c=COUNTERS[towType]||{};
+  const d=ENEMIES[enemyType];
+  return (d&&c[d.cat])||1;
+}
 /* Lv4/Lv5 解锁波次：开场塔为第10/20波；后期解锁的塔顺延10波 */
 function towerGate(type,lvNum){ return (TOWERS[type].unlock||0) + (lvNum-3)*10; }
 
@@ -340,17 +366,17 @@ let G=null, paused=false, lastT=0, running=false;
 
 function newGame(){
   return {
-    gold:150, lives:20, wave:0, kills:0, score:0,
+    gold:200, lives:20, wave:0, kills:0, score:0, leaked:0,
     enemies:[], towers:[], bullets:[], fx:[], floats:[],
     phase:'idle', countdown:5, queue:[], spawnGap:0, spawnIdx:0,
-    sel:null, over:false, submitted:false,
+    sel:null, over:false, submitted:false, skillAt:-999,
   };
 }
 
-/* 波次编成：按功能分配的一套完整波次 */
+/* 波次编成：按功能分配的一套完整波次（前期友好：首波仅6只） */
 function buildWave(w){
   const list=[];
-  const n=Math.min(90,8+Math.floor(w*2.4));
+  const n=Math.min(90,5+Math.floor(w*2.5));
   const add=(t,k)=>{for(let i=0;i<k;i++)list.push(t);};
   /* 高速杂兵：主力，占比随波次下降 */
   const fastN=Math.max(3,Math.round(n*Math.max(0.75-0.012*w,0.32)));
@@ -404,9 +430,13 @@ function spawnEnemy(type,w){
   const d=ENEMIES[type];
   const hpMul=Math.pow(1.22,w-1), spdMul=1+Math.min(.9,w*0.015);
   const hp=Math.round(d.hp*hpMul);
+  if(d.cat==='boss'){
+    showToast('⚠ '+d.name+'登场！',2600);
+    G.fx.push({redFlash:true,t:0,life:.5});
+  }
   const base={type,hp,hpMax:hp,spd:d.spd*spdMul,slowUntil:0,slowF:1,
     bounty:d.bounty,dmg:d.dmg,r:d.r,color:d.color,dead:false,
-    seed:Math.random()*10,poisonUntil:0,poisonDps:0,face:Math.PI/2};
+    seed:Math.random()*10,poisonUntil:0,poisonDps:0,face:Math.PI/2,flashUntil:0};
   if(d.fly){
     /* 飞行怪：随机偏移的直线航线（入口上空 → 军营） */
     G.enemies.push({...base,flying:true,flyT:0,
@@ -458,8 +488,7 @@ function moveEnemy(e,dt){
 }
 
 /* 飞行怪：直线扑营（带正弦摆动） */
-function moveFly(e,dt){
-  const now=performance.now()/1000;
+function moveFly(e,dt,now){
   const f=(now<e.slowUntil)?e.slowF:1;
   const total=H+48;
   e.flyT=(e.flyT||0)+e.spd*f*dt/total;
@@ -474,7 +503,7 @@ function moveFly(e,dt){
   e.pos.x=nx; e.pos.y=ny;
   e.prog=t*10000;
   if(e.flyT>=1){
-    e.dead=true; e.leaked=true;
+    e.dead=true; e.leaked=true; G.leaked=(G.leaked||0)+1;
     G.lives-=e.dmg;
     addFloat(WPX[WPX.length-1].x,WPX[WPX.length-1].y-14,'-'+e.dmg,'#ff7d7d');
     if(G.lives<=0){ G.lives=0; endGame(); }
@@ -512,24 +541,25 @@ function towerFire(t,dt,now){
   const buff=dmgBuff();
   if(t.type==='cannon'){
     t.recoil=1; t.muzzleT=now;   // 后坐与炮口闪光
-    G.bullets.push({kind:'shell',x:t.x,y:t.y,tx:best.pos.x,ty:best.pos.y,ang,
+    G.bullets.push({kind:'shell',srcType:'cannon',x:t.x,y:t.y,tx:best.pos.x,ty:best.pos.y,ang,
       spd:200,dmg:st.dmg*buff,blast:st.blast,color:'#e0b050',hitX:best.pos.x,hitY:best.pos.y,
       born:now,targetAlive:true});
     // 炮弹飞向预测点即可：目标位置近似
     G.bullets[G.bullets.length-1].tx=best.pos.x; G.bullets[G.bullets.length-1].ty=best.pos.y;
   }else if(t.type==='lightning'){
-    // 链式闪电：主目标即时命中，向附近敌人跳跃，逐跳衰减×0.8，伤害飘字显示
+    // 链式闪电：主目标即时命中，向附近敌人跳跃，逐跳衰减×0.8，伤害飘字显示；对空额外加成
     t.zapT=now;
     const hitSet=new Set();
-    let cur=best, dmg=st.dmg*buff, px=t.x, py=t.y;
+    let cur=best, decay=1, px=t.x, py=t.y;
     const chainFx=[{x1:px,y1:py,x2:best.pos.x,y2:best.pos.y}];
     for(let i=0;i<=st.chains;i++){
       if(!cur) break;
       hitSet.add(cur);
-      hurt(cur,dmg,now);
+      const dmg=st.dmg*buff*decay*counterMult('lightning',cur.type);
+      hurt(cur,dmg,now,true);
       addFloat(cur.pos.x,cur.pos.y-8,'-'+Math.round(dmg),'#f8f0a0');
+      decay*=0.8;
       const cpos=cur.pos; px=cpos.x; py=cpos.y;
-      dmg*=0.8;
       let nxt=null, nd=130*130;
       for(const e of G.enemies){
         if(e.dead||hitSet.has(e)) continue;
@@ -553,20 +583,21 @@ function towerFire(t,dt,now){
       const L2=bx*bx+by*by;
       const u=Math.max(0,Math.min(1,(ax*bx+ay*by)/L2));
       const cx=t.x+bx*u, cy=t.y+by*u;
-      if(Math.hypot(e.pos.x-cx,e.pos.y-cy)<=e.r+5) hurt(e,st.dmg*buff,now);
+      if(Math.hypot(e.pos.x-cx,e.pos.y-cy)<=e.r+5) hurt(e,st.dmg*buff*counterMult('laser',e.type),now,true);
     }
   }else{
     const kind=t.type==='frost'?'frost':(t.type==='poison'?'poison':'arrow');
-    G.bullets.push({kind,x:t.x,y:t.y,
+    G.bullets.push({kind,srcType:t.type,x:t.x,y:t.y,
       target:best,spd:t.type==='frost'?260:(t.type==='poison'?230:340),dmg:st.dmg*buff,
       slow:st.slow,st:st.st,pDps:st.pDps&&st.pDps*buff,pDur:st.pDur,
       color:t.type==='frost'?'#9fd0ff':(t.type==='poison'?'#8cf06a':'#e8e8c0'),ang});
   }
 }
 
-function hurt(e,dmg,now){
+function hurt(e,dmg,now,flash){
   if(e.dead) return;
   e.hp-=dmg;
+  if(flash) e.flashUntil=(now||0)+0.09;
   if(e.hp<=0){
     e.dead=true; e.killed=true;
     G.gold+=e.bounty; G.kills++;
@@ -589,7 +620,7 @@ function moveBullets(dt,now){
         boom(b.x,b.y,b.blast,'#e8a040');
         for(const e of G.enemies){
           if(e.dead) continue;
-          if(Math.hypot(e.pos.x-b.x,e.pos.y-b.y)<=b.blast+e.r) hurt(e,b.dmg,now);
+          if(Math.hypot(e.pos.x-b.x,e.pos.y-b.y)<=b.blast+e.r) hurt(e,b.dmg*counterMult(b.srcType||'cannon',e.type),now,true);
         }
       }else{
         b.x+=dx/d*step; b.y+=dy/d*step;
@@ -601,7 +632,7 @@ function moveBullets(dt,now){
       const step=b.spd*dt;
       if(d<=step+e.r*0.5){
         b.hit=true;
-        hurt(e,b.dmg,now);
+        hurt(e,b.dmg*counterMult(b.srcType||'arrow',e.type),now,true);
         if(b.kind==='frost'&&!e.dead){
           e.slowUntil=now+b.st; e.slowF=b.slow;
           boom(e.pos.x,e.pos.y,e.r+6,'#9fd0ff');
@@ -622,16 +653,19 @@ function moveBullets(dt,now){
 function boom(x,y,r,color){ G.fx.push({x,y,r,color,t:0,life:.32}); }
 function addFloat(x,y,txt,color){ G.floats.push({x,y,txt,color,t:0,life:.9}); }
 
-/* ================= 主循环 ================= */
+/* ================= 主循环（虚拟时钟 VT：倍速下塔射速/减速/冷却同步加速） ================= */
+let VT=0, speedMult=1;
 function tick(ts){
   if(!running) return;
   requestAnimationFrame(tick);
-  const now=ts/1000;
-  let dt=Math.min(0.05,now-(lastT||now));
-  lastT=now;
-  if(paused||!G) { draw(now); return; }
-  update(dt,now);
-  draw(now);
+  const nowR=ts/1000;
+  let dtR=Math.min(0.05,nowR-(lastT||nowR));
+  lastT=nowR;
+  const dt=dtR*speedMult;
+  VT+=dt;
+  if(paused||!G) { draw(VT); return; }
+  update(dt,VT);
+  draw(VT);
 }
 
 function update(dt,now){
@@ -642,7 +676,7 @@ function update(dt,now){
   if(G.phase==='idle'){
     G.countdown-=dt;
     const info=document.getElementById('waveInfo');
-    info.textContent='第 '+(w+1)+' 波来袭倒计时 '+Math.ceil(Math.max(0,G.countdown))+'s';
+    info.textContent='第 '+(w+1)+' 波倒计时 '+Math.ceil(Math.max(0,G.countdown))+'s · 下波: '+nextWaveSummary(w+1);
     if(G.countdown<=0) startWave();
   }else if(G.phase==='spawning'){
     G.spawnGap-=dt;
@@ -659,7 +693,7 @@ function update(dt,now){
       G.phase='idle'; G.countdown=5;
       G.score=calcScore(G);
       updateHUD();
-      document.getElementById('waveInfo').textContent='第 '+(G.wave+1)+' 波来袭倒计时 5s';
+      document.getElementById('waveInfo').textContent='第 '+(G.wave+1)+' 波倒计时 5s · 下波: '+nextWaveSummary(G.wave+1);
       if(G.wave>0 && G.wave%10===0) milestone();
     }
   }
@@ -667,7 +701,7 @@ function update(dt,now){
   /* 敌人移动（地面走谷道 / 飞行走直线）+ 萨满治疗光环 + 毒伤 */
   for(const e of G.enemies){
     if(e.dead) continue;
-    if(e.flying) moveFly(e,dt); else moveEnemy(e,dt);
+    if(e.flying) moveFly(e,dt,now); else moveEnemy(e,dt,now);
     if(e.dead) continue;
     if(now<e.poisonUntil&&e.poisonDps>0){
       hurt(e,e.poisonDps*dt,now);
@@ -704,6 +738,21 @@ function update(dt,now){
   G.floats=G.floats.filter(f=>f.t<f.life);
 }
 
+/* 下一波预告：取下波构成前三种简报 */
+function nextWaveSummary(w){
+  try{
+    const q=buildWave(w);
+    const cnt={};
+    for(const t of q) cnt[t]=(cnt[t]||0)+1;
+    const items=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]).slice(0,3)
+      .map(k=>ENEMIES[k].name+'×'+cnt[k]).join(' ');
+    return items+(Object.keys(cnt).length>3?'…':'');
+  }catch(e){ return ''; }
+  /* 技能按钮冷却刷新（0.5s 节流） */
+  const tickHalf=Math.floor(VT*2);
+  if(tickHalf!==Math.floor((VT-dt)*2)) updateHUD();
+}
+
 function startWave(){
   G.wave++;
   G.queue=buildWave(G.wave);
@@ -716,6 +765,35 @@ function startWave(){
 }
 
 /* ================= 绘制 ================= */
+/* 地面装饰：固定种子生成的草丛/小石（避开路径，塔在上层可覆盖） */
+const GROUND_DECOR=(()=>{
+  const arr=[];
+  let seed=7;
+  const rnd=()=>{ seed=(seed*9301+49297)%233280; return seed/233280; };
+  for(let i=0;i<26;i++){
+    const c=Math.floor(rnd()*COLS), r=Math.floor(rnd()*ROWS);
+    if(pathCells.has(c+','+r)) continue;
+    arr.push({x:c*CELL+8+rnd()*32, y:r*CELL+8+rnd()*32, k:rnd()<0.72?'grass':'rock', s:0.7+rnd()*0.6});
+  }
+  return arr;
+})();
+function drawDecor(){
+  for(const d of GROUND_DECOR){
+    if(d.k==='grass'){
+      ctx.strokeStyle='rgba(94,140,74,.55)'; ctx.lineWidth=1.4; ctx.lineCap='round';
+      for(let i=-1;i<=1;i++){
+        ctx.beginPath();
+        ctx.moveTo(d.x+i*2.6,d.y);
+        ctx.quadraticCurveTo(d.x+i*3.6,d.y-4*d.s,d.x+i*4.6,d.y-7*d.s);
+        ctx.stroke();
+      }
+    }else{
+      ctx.fillStyle='rgba(120,126,120,.35)';
+      ctx.beginPath(); ctx.ellipse(d.x,d.y,4.2*d.s,3*d.s,0,0,Math.PI*2); ctx.fill();
+    }
+  }
+}
+
 function draw(now){
   ctx.clearRect(0,0,W,H);
   /* 草地棋盘格 */
@@ -723,6 +801,7 @@ function draw(now){
     ctx.fillStyle=((r+c)%2===0)?'#1c2b1c':'#1a271a';
     ctx.fillRect(c*CELL,r*CELL,CELL,CELL);
   }
+  drawDecor();
   /* 可建空地高亮虚格 */
   if(G){
     const hasTower=(c,r)=>G.towers.some(t=>t.c===c&&t.r===r);
@@ -765,6 +844,17 @@ function draw(now){
     ctx.strokeStyle='rgba(200,230,200,.4)'; ctx.lineWidth=1.5; ctx.stroke();
     ctx.fillStyle='rgba(200,230,200,.07)'; ctx.fill();
   }
+  /* 建塔预览：按住卡片时显示该塔射程圈（青色） */
+  if(G&&window.__preview){
+    const pv=window.__preview;
+    ctx.beginPath(); ctx.arc(pv.x,pv.y,pv.range,0,Math.PI*2);
+    ctx.fillStyle='rgba(120,220,190,.10)'; ctx.fill();
+    ctx.strokeStyle='rgba(120,220,190,.55)'; ctx.lineWidth=2; ctx.stroke();
+    ctx.setLineDash([6,5]);
+    ctx.strokeStyle='rgba(120,220,190,.35)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(pv.x,pv.y,pv.range*0.6,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
   /* 塔 */
   if(G) for(const t of G.towers) drawTower(t,now);
@@ -785,7 +875,23 @@ function draw(now){
   /* 爆炸特效 */
   if(G) for(const f of G.fx){
     const p=f.t/f.life;
-    if(f.lightning){
+    if(f.iceFlash){
+      /* 大招：全屏冰霜渐隐 */
+      ctx.fillStyle='rgba(150,215,255,'+(0.30*(1-p)).toFixed(3)+')';
+      ctx.fillRect(0,0,W,H);
+    }else if(f.redFlash){
+      /* Boss 登场：全屏红光渐隐 */
+      ctx.fillStyle='rgba(255,80,50,'+(0.22*(1-p)).toFixed(3)+')';
+      ctx.fillRect(0,0,W,H);
+    }else if(f.pillar){
+      /* 升级光柱 */
+      const g=ctx.createLinearGradient(0,f.y-46,0,f.y+10);
+      g.addColorStop(0,'rgba(255,236,150,0)');
+      g.addColorStop(1,'rgba(255,236,150,'+(0.7*(1-p)).toFixed(3)+')');
+      ctx.fillStyle=g;
+      const w=14*(1-p)+4;
+      ctx.fillRect(f.x-w/2,f.y-46,w,52);
+    }else if(f.lightning){
       /* 闪电折线：多段随机抖动 */
       ctx.strokeStyle=f.color; ctx.globalAlpha=1-p;
       ctx.lineWidth=2.4-p*1.6; ctx.lineJoin='round';
@@ -1474,8 +1580,26 @@ function drawEnemy(e,now){
     ctx.lineWidth=3;
     ctx.beginPath(); ctx.arc(x,y,r*1.32+Math.sin(now*3)*2,0,Math.PI*2); ctx.stroke();
   }
+  /* 精英：淡青发光描边 */
+  if(d.cat==='elite'){
+    const gl=ctx.createRadialGradient(x,y,r*0.5,x,y,r*1.6);
+    gl.addColorStop(0,'rgba(120,230,220,.28)');
+    gl.addColorStop(1,'rgba(120,230,220,0)');
+    ctx.fillStyle=gl;
+    ctx.beginPath(); ctx.arc(x,y,r*1.6,0,Math.PI*2); ctx.fill();
+  }
   const pk=d.base||e.type;
   (MONSTER_PAINTERS[pk]||MONSTER_PAINTERS.slime)(x,y,r,now,e);
+  /* 重甲：灰甲描边（可辨识护甲类） */
+  if(d.cat==='armor'){
+    ctx.strokeStyle='rgba(88,94,102,.8)'; ctx.lineWidth=3.5;
+    ctx.beginPath(); ctx.arc(x,y,r+1,0,Math.PI*2); ctx.stroke();
+  }
+  /* 受击闪红 */
+  if(now<e.flashUntil){
+    ctx.fillStyle='rgba(255,60,60,.55)';
+    ctx.beginPath(); ctx.arc(x,y,r+1,0,Math.PI*2); ctx.fill();
+  }
   /* 冰冻减速环 */
   if(now<e.slowUntil){
     ctx.strokeStyle='#9fd0ff'; ctx.lineWidth=2.5;
@@ -1506,7 +1630,13 @@ function updateHUD(){
   document.getElementById('hGold').textContent=G.gold;
   document.getElementById('hLife').textContent=G.lives;
   document.getElementById('hWave').textContent=G.wave;
-  document.getElementById('hScore').textContent=calcScore(G);
+  document.getElementById('hScore').textContent=G.kills;
+  const sb=document.getElementById('skillBtn');
+  if(sb&&G&&!G.over){
+    const remain=45-(VT-(G.skillAt||-999));
+    if(remain<=0){ sb.disabled=false; sb.textContent='❄冰冻'; sb.classList.remove('cooling'); }
+    else{ sb.disabled=true; sb.classList.add('cooling'); sb.textContent='❄'+Math.ceil(remain)+'s'; }
+  }
 }
 
 function canvasPos(ev){
@@ -1541,6 +1671,7 @@ function hideSheetsAndClear(){
 
 /* 点页面任意空白处收起面板（恢复底部操作条） */
 document.addEventListener('pointerdown',ev=>{
+  window.__preview=null;
   if(!G||G.over) return;
   const sheet=document.querySelector('.sheet.on');
   if(!sheet) return;
@@ -1548,9 +1679,11 @@ document.addEventListener('pointerdown',ev=>{
   hideSheets();
 },true);
 
-/* 建塔面板（未解锁兵种显示锁定状态） */
+/* 建塔面板（未解锁兵种显示锁定状态；按住卡片预览射程） */
 function showBuildSheet(){
   hideSheets();
+  window.__preview=null;
+  const title=document.getElementById('buildTitle');
   const box=document.getElementById('buildCards');
   box.innerHTML='';
   for(const key of TOWER_KEYS){
@@ -1566,7 +1699,15 @@ function showBuildSheet(){
     }else{
       el.innerHTML='<div class="tn" style="color:'+d.color+'">'+d.name+'</div>'+
         '<div class="td">'+d.desc+'</div><div class="tc">'+d.cost+'</div>';
+      /* 按住卡片：预览射程圈（移动端友好） */
+      el.addEventListener('pointerdown',()=>{
+        if(!G.sel) return;
+        window.__preview={x:G.sel.c*CELL+CELL/2,y:G.sel.r*CELL+CELL/2,range:d.lv[0].range};
+        title.textContent=d.name+' · 射程 '+d.lv[0].range+' · 松开建造';
+      });
       el.addEventListener('click',()=>{
+        window.__preview=null;
+        title.textContent='选择要建造的塔（按住卡片看射程）';
         if(!G.sel){ hideSheets(); return; }
         if(G.gold<d.cost){ addFloat(W/2,H/2,'金币不足','#ff9d9d'); return; }
         G.gold-=d.cost;
@@ -1606,12 +1747,13 @@ function selectTower(t){
     if(G.wave>=gateW){
       upBtn.disabled=false;
       upBtn.textContent='升级 Lv'+nextLvl+'（'+cost+'）';
-      upBtn.onclick=()=>{
-        if(G.gold<cost){ addFloat(W/2,H/2,'金币不足','#ff9d9d'); return; }
-        G.gold-=cost; t.lvl++;
-        boom(t.x,t.y,26,'#f0dc78');
-        selectTower(t); updateHUD();
-      };
+    upBtn.onclick=()=>{
+      if(G.gold<cost){ addFloat(W/2,H/2,'金币不足','#ff9d9d'); return; }
+      G.gold-=cost; t.lvl++;
+      boom(t.x,t.y,26,'#f0dc78');
+      G.fx.push({pillar:true,x:t.x,y:t.y,t:0,life:.5});
+      selectTower(t); updateHUD();
+    };
     }else{
       upBtn.disabled=true;
       upBtn.textContent='Lv'+nextLvl+' · 第'+gateW+'波解锁';
@@ -1629,6 +1771,29 @@ function selectTower(t){
   document.getElementById('towerSheet').classList.add('on');
   document.getElementById('bottom').classList.add('hideforSheet');
 }
+
+/* 大招：全体冰冻3秒，冷却45秒 */
+document.getElementById('skillBtn').addEventListener('click',()=>{
+  if(!G||G.over||paused) return;
+  if(VT-(G.skillAt||-999)<45) return;
+  G.skillAt=VT;
+  for(const e of G.enemies){
+    if(e.dead) continue;
+    e.slowUntil=VT+3; e.slowF=0.05;
+  }
+  G.fx.push({iceFlash:true,t:0,life:.55});
+  showToast('❄ 全体冰冻 3 秒！',2200);
+  updateHUD();
+});
+
+/* 倍速：1× / 2× 循环 */
+document.getElementById('speedBtn').addEventListener('click',()=>{
+  speedMult=speedMult===1?2:1;
+  const btn=document.getElementById('speedBtn');
+  btn.textContent=speedMult===1?'速1×':'速2×';
+  btn.classList.toggle('off',speedMult!==1);
+  showToast(speedMult===1?'恢复常规速度':'2× 加速开启（塔射速同步加快）',1800);
+});
 
 /* 立即出怪 */
 document.getElementById('callBtn').addEventListener('click',()=>{
@@ -1713,6 +1878,7 @@ async function detectReportHost(){
 }
 let REPORT_HOST='';
 let remoteFailUntil=0;   // 主服务器连不上后的60秒冷却（避免每次开榜都等超时）
+let NO_BACKEND=false;    // 静态环境缓存：首次探测失败后不再浪费同源请求（减少控制台404噪音）
 
 async function fetchJSON(url,opts,timeoutMs){
   const ctrl=new AbortController();
@@ -1729,24 +1895,26 @@ function noteRemoteFail(){
   /* 冷却同时拉一次最新主机地址（隧道可能刚换） */
   detectReportHost().then(h=>{ if(h) REPORT_HOST=h; });
 }
+/* 同源探测：静态环境首次失败后记住，直接走远程/降级 */
+function markNoBackend(){ NO_BACKEND=true; }
 
 const API={
   /* 成绩提交：进全国榜（实时优先） */
   async submitScore(rec){
-    try{
+    if(!NO_BACKEND) try{
       const data=await fetchJSON('/api/score',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(rec),
-      },4000);
+      },2500);
       if(data&&data.ok) return {ok:true,mode:'server'};
       throw new Error('bad');
-    }catch(e){}
+    }catch(e){ markNoBackend(); }
     if(remoteReady()){
       try{
         const data=await fetchJSON(REPORT_HOST+'/api/score',{
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify(rec),
-        },5000);
+        },3500);
         if(data&&data.ok) return {ok:true,mode:'remote'};
         throw new Error('bad');
       }catch(e){ noteRemoteFail(); }
@@ -1759,36 +1927,36 @@ const API={
     const local=LocalBoard.load();
     if(!local.length) return {ok:false,reason:'本机榜没有成绩'};
     const payload={scores:local};
-    try{
+    if(!NO_BACKEND) try{
       const data=await fetchJSON('/api/report',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(payload),
-      },4000);
+      },2500);
       if(data&&data.ok) return {ok:true,mode:'server',merged:data.merged||0};
       throw new Error('bad');
-    }catch(e){}
+    }catch(e){ markNoBackend(); }
     if(remoteReady()){
       try{
         const data=await fetchJSON(REPORT_HOST+'/api/report',{
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify(payload),
-        },6000);
+        },4000);
         if(data&&data.ok) return {ok:true,mode:'remote',merged:data.merged||0};
         return {ok:false,reason:(data&&data.msg)||'上报失败'};
       }catch(e){ noteRemoteFail(); return {ok:false,reason:'主服务器不可达'}; }
     }
     return {ok:false,reason:'主服务器离线（稍后自动重试）'};
   },
-  /* 榜单读取：全国实时榜优先 */
+  /* 榜单读取：全国实时榜优先（各级均限时，永不卡“读取中”） */
   async fetchBoard(){
-    try{
-      const data=await fetchJSON('/api/scores',{},4000);
+    if(!NO_BACKEND) try{
+      const data=await fetchJSON('/api/scores',{},2500);
       if(data&&data.ok) return {ok:true,mode:'server',scores:data.scores||[],provinces:data.provinces||[]};
       throw new Error('bad');
-    }catch(e){}
+    }catch(e){ markNoBackend(); }
     if(remoteReady()){
       try{
-        const data=await fetchJSON(REPORT_HOST+'/api/scores',{},4500);
+        const data=await fetchJSON(REPORT_HOST+'/api/scores',{},3000);
         if(data&&data.ok){
           /* 实时全国榜 + 本机榜合并显示（本机未上报的也能看到自己） */
           const merged=LocalBoard._rank(mergeBoards(data.scores||[],LocalBoard.load()));
@@ -1797,11 +1965,10 @@ const API={
         throw new Error('bad');
       }catch(e){ noteRemoteFail(); }
     }
-    /* 降级：GitHub 共享榜（约5分钟同步）+ 本机榜 */
+    /* 降级：GitHub 共享榜（约5分钟同步）+ 本机榜（也限时，全链路最长约9秒内出结果） */
     let shared=[];
     try{
-      const r2=await fetch('scores.json',{cache:'no-store'});
-      const d2=await r2.json();
+      const d2=await fetchJSON('scores.json',{cache:'no-store'},3000);
       if(d2&&Array.isArray(d2.scores)) shared=d2.scores;
     }catch(e2){}
     const merged=LocalBoard._rank(mergeBoards(shared,LocalBoard.load()));
@@ -2009,6 +2176,7 @@ function endGame(){
   document.getElementById('eKill').textContent=G.kills*50;
   document.getElementById('eLife').textContent=Math.max(0,G.lives)*100;
   document.getElementById('eGold').textContent=Math.floor(Math.max(0,G.gold));
+  document.getElementById('eLeak').textContent=(G.leaked||0)+' 只';
   document.getElementById('eTotal').textContent=G.score;
   const btn=document.getElementById('submitBtn');
   btn.disabled=false; btn.textContent='提交成绩';
@@ -2046,7 +2214,11 @@ async function showBoard(){
   const provList=document.getElementById('provList');
   list.innerHTML='<div class="rankEmpty">读取中…</div>';
   provList.innerHTML='';
+  /* 3 秒未返回则提示降级，避免“无限读取中”观感 */
+  let done=false;
+  const slow=setTimeout(()=>{ if(!done) list.innerHTML='<div class="rankEmpty">网络较慢，正在切换本地榜…</div>'; },3000);
   const data=await API.fetchBoard();
+  done=true; clearTimeout(slow);
   /* 上报按钮：非同源联机模式下，本机榜有未上榜成绩就显示 */
   const rBtn=document.getElementById('reportBtn');
   const localCount=(data.mode==='local'||data.mode==='remote')?LocalBoard.load().length:0;
